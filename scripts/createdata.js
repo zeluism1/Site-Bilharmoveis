@@ -26,8 +26,7 @@ const materialsMap = {
   'silla': ['Madeira', 'Estofamento de qualidade'],
   'banqueta': ['Madeira', 'Metal reforçado', 'Estofamento premium'],
   'mesa': ['Madeira maciça', 'Metal', 'Tampo em melamina/compact'],
-  'sillon': ['Madeira', 'Corda trançada à mão', 'Estrutura reforçada'], // Assuming sillon maps to sofa type
-  'sofa': ['Madeira maciça', 'Estofamento de alta durabilidade', 'Corda de exterior']
+  'sofa': ['Madeira', 'Corda trançada à mão', 'Estrutura reforçada', 'Estofamento de alta durabilidade']
 };
 
 const colorMap = {
@@ -75,7 +74,7 @@ const colorMap = {
 };
 const knownColorKeys = Object.keys(colorMap);
 
-function formatModelName(name) { // Your original formatProductName
+function formatModelName(name) {
   return name
     .split('-')
     .map(word => word.charAt(0).toUpperCase() + word.slice(1).toLowerCase())
@@ -87,40 +86,37 @@ function parseFilenameDetails(filename, modelNamePartsLower) {
     let nameSansExt = filename.substring(0, filename.length - ext.length);
     
     let isAngleExplicit = false; // Changed name for clarity
-    let baseNameForGrouping = nameSansExt; 
+    let baseNameForColorParsing = nameSansExt;
 
     const angleSuffixes = ['_trasera', '_espalda', '_detalle-soldadura-latonada'];
     const angleKeywords = ['trasera', 'espalda'];
 
     for (const suffix of angleSuffixes) {
-        if (baseNameForGrouping.toLowerCase().endsWith(suffix)) {
-            baseNameForGrouping = baseNameForGrouping.substring(0, baseNameForGrouping.length - suffix.length);
+        if (baseNameForColorParsing.toLowerCase().endsWith(suffix)) {
+            baseNameForColorParsing = baseNameForColorParsing.substring(0, baseNameForColorParsing.length - suffix.length);
             isAngleExplicit = true;
             break;
         }
     }
     if (!isAngleExplicit) {
-        const lowerBaseName = baseNameForGrouping.toLowerCase();
+        const lowerBaseName = baseNameForColorParsing.toLowerCase();
         if (angleKeywords.some(kw => {
             const kwIndex = lowerBaseName.lastIndexOf(kw);
-            return kwIndex > 0 && (lowerBaseName.length === kwIndex + kw.length || !(/[a-z0-9]/i.test(lowerBaseName[kwIndex+kw.length]))) && !modelNamePartsLower.includes(kw);
+            // Check if kw is a whole word suffix or followed by non-alphanumeric, and not part of model name
+            return kwIndex > 0 && 
+                   (lowerBaseName.length === kwIndex + kw.length || !(/[a-z0-9]/i.test(lowerBaseName[kwIndex+kw.length]))) && 
+                   !modelNamePartsLower.includes(kw);
         })) {
            isAngleExplicit = true;
         }
-        // Check for _detalle, ensuring it's not part of a model name like "detalle-producto"
-        const detalleIndex = lowerBaseName.lastIndexOf('_detalle');
-        if (detalleIndex > 0 && !modelNamePartsLower.some(p => p.includes('detalle'))) {
-             // Check if it's truly a suffix or part of a descriptive word
-            const partAfterDetalle = lowerBaseName.substring(detalleIndex + '_detalle'.length);
-            if (!partAfterDetalle || !/^[a-z]/.test(partAfterDetalle)) { // if nothing follows or not a letter
-                 isAngleExplicit = true;
-            }
+        if (lowerBaseName.includes('_detalle') && !modelNamePartsLower.some(p => p.includes('detalle'))){
+            isAngleExplicit = true;
         }
     }
 
-    let parts = baseNameForGrouping.split('-');
+    let parts = baseNameForColorParsing.split('-');
     let colorInfo = null;
-    let partsBeforeColor = [...parts]; 
+    let partsBeforeColor = [...parts];
 
     for (let len = Math.min(3, partsBeforeColor.length); len >= 1; len--) {
         const potentialColorKey = partsBeforeColor.slice(-len).join('-').toLowerCase();
@@ -131,15 +127,20 @@ function parseFilenameDetails(filename, modelNamePartsLower) {
         }
     }
     
-    const variantDefiningId = baseNameForGrouping.toLowerCase().replace(/[^a-z0-9-_]/g, '-').replace(/-+/g, '-');
+    // variantDefiningId is based on the name *after* angle indicators are removed but *before* color is removed (if any).
+    // This ensures that "product-color.jpg" and "product-color_trasera.jpg" refer to the same variant.
+    const variantDefiningId = baseNameForColorParsing.toLowerCase().replace(/[^a-z0-9-_]/g, '-').replace(/-+/g, '-');
+    
+    // The key used to group all images for a single variant (e.g. "Insbruck chair in cream")
+    // It's the parts *before* color, plus the color key itself.
     const variantGroupKey = `${partsBeforeColor.join('-').toLowerCase()}_colorkey_${colorInfo ? colorInfo.key : 'default'}`;
 
     return {
         originalFilename: filename,
-        variantDefiningId: variantDefiningId, 
-        variantGroupKey: variantGroupKey,   
+        variantDefiningId: variantDefiningId,
+        variantGroupKey: variantGroupKey,
         colorInfo: colorInfo,
-        isAngleExplicit: isAngleExplicit, 
+        isAngleExplicit: isAngleExplicit,
     };
 }
 
@@ -147,98 +148,68 @@ function getProductTypeFromSubcategory(subcategoryKey) {
     return subcategoryMap[subcategoryKey] ? subcategoryMap[subcategoryKey].type : 'unknown';
 }
 
-function generateMockDimensions(productType) { // Your original generateDimensions
-  let dimensions = { width: 50, height: 80, depth: 55, unit: 'cm' };
-  if (productType.toLowerCase().includes('banqueta')) {
-    dimensions = { width: 45, height: 105, depth: 47, unit: 'cm' };
-  } else if (productType.toLowerCase().includes('mesa')) {
-    dimensions = { width: 80, height: 75, depth: 80, unit: 'cm' };
-  } else if (productType.toLowerCase().includes('sillon') || productType.toLowerCase().includes('sofa')) { // Combined sillon and sofa
-    dimensions = { width: 140, height: 75, depth: 70, unit: 'cm' };
-  }
-  return dimensions;
+function generateMockDimensions(productType) {
+  let dims = { width: 50, height: 80, depth: 55, unit: 'cm' };
+  if (productType === 'banqueta') dims = { width: 45, height: 105, depth: 47, unit: 'cm' };
+  else if (productType === 'mesa') dims = { width: 80, height: 75, depth: 80, unit: 'cm' };
+  else if (productType === 'sofa') dims = { width: 140, height: 75, depth: 70, unit: 'cm' };
+  return dims;
 }
 
-function generateModelDescriptionI18n(modelName, categoryName, productTypeNameDefaultLang) { // Your original generateDescription adapted
+function generateModelDescriptionI18n(modelName, categoryName, productTypeNameDefaultLang) {
     const i18nDesc = {};
-    const basePt = `Conheça ${productTypeNameDefaultLang} ${modelName}, uma peça de design versátil da nossa coleção ${categoryName.toLowerCase()}. Ideal para adicionar estilo e funcionalidade a qualquer ambiente.`;
-    const baseEn = `Meet the ${modelName} ${productTypeNameDefaultLang === 'Cadeira' ? 'Chair' : productTypeNameDefaultLang === 'Mesa' ? 'Table' : productTypeNameDefaultLang}, a versatile design piece from our ${categoryName.toLowerCase()} collection. Ideal for adding style and functionality to any setting.`;
-    const baseEs = `Descubre ${productTypeNameDefaultLang === 'Cadeira' ? 'Silla' : productTypeNameDefaultLang === 'Mesa' ? 'Mesa' : productTypeNameDefaultLang} ${modelName}, una pieza de diseño versátil de nuestra colección de ${categoryName.toLowerCase()}. Ideal para añadir estilo y funcionalidad a cualquier ambiente.`;
+    const productTypeEn = productTypeNameDefaultLang === 'Cadeira' ? 'Chair' : productTypeNameDefaultLang === 'Mesa' ? 'Table' : productTypeNameDefaultLang === 'Banco' ? 'Stool' : productTypeNameDefaultLang === 'Sofá' ? 'Sofa' : productTypeNameDefaultLang;
+    const productTypeEs = productTypeNameDefaultLang === 'Cadeira' ? 'Silla' : productTypeNameDefaultLang === 'Mesa' ? 'Mesa' : productTypeNameDefaultLang === 'Banco' ? 'Taburete' : productTypeNameDefaultLang === 'Sofá' ? 'Sofá' : productTypeNameDefaultLang;
 
-    i18nDesc['pt'] = basePt;
-    i18nDesc['en'] = baseEn;
-    i18nDesc['es'] = baseEs;
+    i18nDesc['pt'] = `Conheça ${productTypeNameDefaultLang} ${modelName}, uma peça de design versátil da nossa coleção ${categoryName.toLowerCase()}. Ideal para adicionar estilo e funcionalidade a qualquer ambiente.`;
+    i18nDesc['en'] = `Meet the ${modelName} ${productTypeEn}, a versatile design piece from our ${categoryName.toLowerCase()} collection. Ideal for adding style and functionality to any setting.`;
+    i18nDesc['es'] = `Descubre ${productTypeEs} ${modelName}, una pieza de diseño versátil de nuestra colección de ${categoryName.toLowerCase()}. Ideal para añadir estilo y funcionalidad a cualquier ambiente.`;
     return i18nDesc;
 }
 
-function generateFeatures(category, type) { // Your original generateFeatures
-  const baseFeatures = [ "Design exclusivo", "Alta durabilidade", "Construção reforçada para uso comercial" ];
-  let additionalFeatures = [];
-  if (category === 'Interior') {
-    additionalFeatures.push("Estofamento premium", "Acabamento de alta qualidade");
-    if (type.toLowerCase().includes('silla')) additionalFeatures.push("Conforto ergonômico", "Empilhável para fácil armazenamento");
-    else if (type.toLowerCase().includes('banqueta')) additionalFeatures.push("Descanso para pés reforçado", "Disponível em altura de balcão e bar");
-  } else {
-    additionalFeatures.push("Resistente às condições climatéricas", "Tratamento UV para maior durabilidade");
-    if (type.toLowerCase().includes('silla') || type.toLowerCase().includes('sillon') || type.toLowerCase().includes('sofa')) {
-        additionalFeatures.push("Secagem rápida após chuva", "Peso ideal para resistir a ventos");
-    }
-  }
-  return [...baseFeatures, ...additionalFeatures];
+function generateFeatures(categoryName, productType) { return ["Design exclusivo", "Alta durabilidade", "Construção robusta"]; } // These should ideally be i18n keys
+function generateWeight(productType) { 
+    if (productType === 'silla') return 4.5;
+    if (productType === 'banqueta') return 6.0;
+    if (productType === 'mesa') return 15.0;
+    if (productType === 'sofa') return 12.0;
+    return 5.0;
+ }
+function extractMaterials(productType) { // These should ideally be i18n keys
+    return materialsMap[productType] || ['Madeira de alta qualidade'];
 }
-
-function generateWeight(type) { // Your original generateWeight
-  if (type.toLowerCase().includes('silla')) return 4.5;
-  if (type.toLowerCase().includes('banqueta')) return 6.0;
-  if (type.toLowerCase().includes('mesa')) return 15.0;
-  if (type.toLowerCase().includes('sillon') || type.toLowerCase().includes('sofa')) return 12.0; // Combined
-  return 5.0;
-}
-
-function extractMaterials(productType) { // Your original extractMaterials
-  let materials = ['Madeira']; // Default
-  // Handle 'sillon' by checking if productType includes it, then mapping to 'sofa' key or specific 'sillon' entry
-  const typeForMap = productType.toLowerCase().includes('sillon') ? 'sillon' : productType.toLowerCase();
-
-  for (const [key, mats] of Object.entries(materialsMap)) {
-    if (typeForMap.includes(key)) { // Use .includes for broader matching like 'silla' in 'sillon' if not specific
-      materials = mats;
-      break;
-    }
-  }
-  // If still default and type is sillon, try sofa materials
-  if (materials.length === 1 && materials[0] === 'Madeira' && typeForMap === 'sillon' && materialsMap['sofa']) {
-    materials = materialsMap['sofa'];
-  }
-  return materials;
-}
-
 
 function getSeatColors(seatFolderDir, modelNamePartsLowerForSeatfiles) {
     const seatColorObjects = [];
     const foundColorKeys = new Set();
+
     const asientoSingularPath = path.join(seatFolderDir, 'asiento');
     const asientoPluralPath = path.join(seatFolderDir, 'asientos');
+    
     let actualSeatPath = null;
-
-    if (fs.existsSync(asientoSingularPath) && fs.statSync(asientoSingularPath).isDirectory()) actualSeatPath = asientoSingularPath;
-    else if (fs.existsSync(asientoPluralPath) && fs.statSync(asientoPluralPath).isDirectory()) actualSeatPath = asientoPluralPath;
+    if (fs.existsSync(asientoSingularPath) && fs.statSync(asientoSingularPath).isDirectory()) {
+        actualSeatPath = asientoSingularPath;
+    } else if (fs.existsSync(asientoPluralPath) && fs.statSync(asientoPluralPath).isDirectory()) {
+        actualSeatPath = asientoPluralPath;
+    }
 
     if (actualSeatPath) {
         try {
-            const seatFiles = fs.readdirSync(actualSeatPath).filter(file => !file.startsWith('.') && file.match(/\.(jpg|jpeg|png|webp)$/i));
+            const seatFiles = fs.readdirSync(actualSeatPath)
+                .filter(file => !file.startsWith('.') && file.match(/\.(jpg|jpeg|png|webp)$/i));
+
             for (const seatFile of seatFiles) {
-                // For seat files, the "model name" part in the filename is often "asiento" or "asiento-MODELNAME".
-                // We effectively want to parse the color from the rest of the filename.
-                // Passing a simplified modelNameParts for seat files, e.g., ['asiento'], helps isolate the color part.
-                const seatFileModelParts = seatFile.toLowerCase().startsWith('asiento-') ? ['asiento'] : modelNamePartsLowerForSeatfiles;
-                const parsedSeatFile = parseFilenameDetails(seatFile, seatFileModelParts);
+                let effectiveModelNameParts = ['asiento']; // For seat files, the "model name" part for color parsing context is 'asiento'
+                
+                const parsedSeatFile = parseFilenameDetails(seatFile, effectiveModelNameParts); // Pass ['asiento'] as model context
                 if (parsedSeatFile.colorInfo && !foundColorKeys.has(parsedSeatFile.colorInfo.key)) {
                     seatColorObjects.push({ name: parsedSeatFile.colorInfo.name, hex: parsedSeatFile.colorInfo.hex, key: parsedSeatFile.colorInfo.key });
                     foundColorKeys.add(parsedSeatFile.colorInfo.key);
                 }
             }
-        } catch (error) { console.error(`Error reading seat colors from ${actualSeatPath}:`, error); }
+        } catch (error) {
+            console.error(`Error reading seat colors from ${actualSeatPath}:`, error);
+        }
     }
     return seatColorObjects.length > 0 ? seatColorObjects : undefined;
 }
@@ -323,19 +294,19 @@ function discoverProductModels() {
                         if (!img.isAngleExplicit && !mainImage) {
                             mainImage = img.path;
                         } else {
-                            // Add to angles if it's explicitly an angle OR if a main image is already found for this non-explicit angle image
+                            // Add to angles if it's explicitly an angle OR if it's another non-angle image after main is set
                             angleImages.push(img.path);
                         }
                     }
                     
-                    if (!mainImage && groupData.imageList.length > 0 ) { // If all images were explicit angles, or only one image total
-                         mainImage = groupData.imageList[0].path; // Take the first one as main
-                         if(groupData.imageList.length > 1) { // if there were more, the rest become angles
-                            angleImages.push(...groupData.imageList.slice(1).map(img => img.path));
-                         }
+                    if (!mainImage && groupData.imageList.length > 0) { // If all images were explicit angles or only one image
+                        mainImage = groupData.imageList[0].path; // Take the first one as main
+                        if(groupData.imageList.length > 1) { // If there were others, they are now angles
+                           angleImages.push(...groupData.imageList.slice(1).map(img => img.path));
+                        }
+                         console.warn(`Model ${modelNameFormatted}, Variant Group ${groupKey}: No clear non-angle main image. Using ${mainImage}.`);
                     }
-
-
+                    
                     if (!mainImage) {
                         console.warn(`Skipping variant group ${groupKey} in model ${modelNameFormatted} - no main image could be determined.`);
                         continue;
@@ -348,7 +319,7 @@ function discoverProductModels() {
                         color: groupData.colorInfo,
                         images: {
                             main: mainImage,
-                            angles: [...new Set(angleImages.filter(imgPath => imgPath !== mainImage))] // Ensure main isn't duplicated, and angles are unique
+                            angles: [...new Set(angleImages.filter(p => p !== mainImage))] // Ensure main is not in angles, and unique
                         },
                         ...(seatColorsForModel && { seatColors: seatColorsForModel }),
                     });
@@ -362,12 +333,12 @@ function discoverProductModels() {
                 finalProductVariants.sort((a, b) => a.id.localeCompare(b.id));
 
                 const modelId = `${modelNameFormatted.toUpperCase().replace(/\s+/g, '-')}-${productType.toUpperCase()}-MODEL`;
+                
+                const productTypeNameDefaultLang = subcategoryMap[subcategoryKey].name[defaultLang] || formatModelName(productType);
                 const displayNameI18n = {};
                 supportedLangs.forEach(lang => {
                     displayNameI18n[lang] = modelNameFormatted; 
                 });
-
-                const productTypeNameDefaultLang = subcategoryMap[subcategoryKey].name[defaultLang] || formatModelName(productType);
 
                 const modelEntry = {
                     modelId: modelId,
@@ -382,15 +353,8 @@ function discoverProductModels() {
                     dimensions: generateMockDimensions(productType),
                     weight: generateWeight(productType),
                     variants: finalProductVariants,
-                    defaultVariantId: finalProductVariants.length > 0 ? finalProductVariants[0].id : null,
+                    defaultVariantId: finalProductVariants[0].id,
                 };
-                 if (!modelEntry.defaultVariantId && finalProductVariants.length > 0) {
-                    modelEntry.defaultVariantId = finalProductVariants[0].id;
-                } else if (finalProductVariants.length === 0) {
-                    console.warn(`Model ${modelNameFormatted} has no variants to set a defaultVariantId.`);
-                    continue;
-                }
-
                 productModelsList.push(modelEntry);
                 if (!relatedModelMap.has(modelNameFormatted)) {
                     relatedModelMap.set(modelNameFormatted, modelId);
@@ -466,6 +430,17 @@ ${angleStrings}
             relatedIdsString = `,\n    relatedProductModelIds: [${model.relatedProductModelIds.map(id => `"${id}"`).join(', ')}]`;
         }
 
+        // Ensure defaultVariantId is valid
+        let defaultVariantId = model.defaultVariantId;
+        if (!model.variants.find(v => v.id === defaultVariantId) && model.variants.length > 0) {
+            console.warn(`Default variant ID "${defaultVariantId}" not found for model "${model.modelName}". Falling back to first variant.`);
+            defaultVariantId = model.variants[0].id;
+        } else if (model.variants.length === 0) {
+            console.error(`Model "${model.modelName}" has no variants. Cannot set defaultVariantId.`);
+            defaultVariantId = "NO_VARIANTS_ERROR"; // Placeholder to indicate error
+        }
+
+
         return `  {
     modelId: "${model.modelId}",
     modelName: "${model.modelName}",
@@ -489,7 +464,7 @@ ${descriptionStrings}
     variants: [
 ${variantsString}
     ],
-    defaultVariantId: "${model.defaultVariantId}"${relatedIdsString}
+    defaultVariantId: "${defaultVariantId}"${relatedIdsString}
   }`;
     }).join(',\n');
 
@@ -501,7 +476,7 @@ export type I18nString = {
 export type ProductColor = {
   name: I18nString;
   hex: string;
-  key?: string;
+  key?: string; 
 };
 
 export type ProductVariant = {
@@ -559,14 +534,9 @@ export function getModelsByCategory(categoryName: string): ProductModel[] {
 }
 
 export function getModelsBySubcategory(subcategoryName: string, lang: string = "${defaultLang}"): ProductModel[] {
-    // Assumes subcategoryName is the localized name for the current language
-    // and model.subcategory stores the defaultLang subcategory name
-    // This might need adjustment based on how subcategory filters are passed
-  return productModels.filter(model => {
-      // If subcategoryMap stores i18n names, we need to find the key for subcategoryName
-      // For now, assuming model.subcategory is the default lang name
-      return model.subcategory.toLowerCase() === subcategoryName.toLowerCase();
-  });
+  // Assumes subcategoryMap.name is i18n and model.subcategory stores the defaultLang version
+  // For more robust matching, you might store subcategory key in model and match against that
+  return productModels.filter(model => model.subcategory.toLowerCase() === subcategoryName.toLowerCase());
 }
 
 export function getModelsByProductType(productType: string): ProductModel[] {
