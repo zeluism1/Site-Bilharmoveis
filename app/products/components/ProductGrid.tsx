@@ -55,10 +55,14 @@ export default function ProductGrid({
     }
 
     // Filter by Color Key
-    // A model is included if AT LEAST ONE of its variants has the selected color.
+    // A model is included if AT LEAST ONE of its variants has the selected color
+    // either as primary color or as a seat color
     if (selectedColorKey && selectedColorKey !== 'all') {
       result = result.filter(model =>
-        model.variants.some(variant => variant.color.key === selectedColorKey)
+        model.variants.some(variant => 
+          variant.color.key === selectedColorKey || 
+          variant.seatColors?.some(seatColor => seatColor.key === selectedColorKey)
+        )
       );
     }
 
@@ -154,11 +158,10 @@ export default function ProductGrid({
         </>
       )}
 
-      <ProductModal // This modal needs to be refactored to handle ProductModel and its variants
-        model={selectedModelForModal} // Pass the whole model
+      <ProductModal
+        model={selectedModelForModal}
         isOpen={isModalOpen}
         onClose={closeProductModal}
-        currentLang={currentLang}
       />
     </div>
   )

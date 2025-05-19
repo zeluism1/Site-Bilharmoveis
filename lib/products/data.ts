@@ -4258,8 +4258,8 @@ export const productModels: ProductModel[] = [
         "es": "Cafe"
     },
     category: "Interior",
-    subcategory: "Cadeiras",
-    productType: "silla",
+    subcategory: "Bancos",
+    productType: "banqueta",
     baseDescription: {
         "pt": "Conheça Cadeiras Cafe, uma peça de design versátil da nossa coleção interior. Ideal para adicionar estilo e funcionalidade a qualquer ambiente.",
         "en": "Meet the Cafe Cadeiras, a versatile design piece from our interior collection. Ideal for adding style and functionality to any setting.",
@@ -4362,8 +4362,8 @@ export const productModels: ProductModel[] = [
         "es": "Cafe plus"
     },
     category: "Interior",
-    subcategory: "Cadeiras",
-    productType: "silla",
+    subcategory: "Bancos",
+    productType: "banqueta",
     baseDescription: {
         "pt": "Conheça Cadeiras Cafe plus, uma peça de design versátil da nossa coleção interior. Ideal para adicionar estilo e funcionalidade a qualquer ambiente.",
         "en": "Meet the Cafe plus Cadeiras, a versatile design piece from our interior collection. Ideal for adding style and functionality to any setting.",
