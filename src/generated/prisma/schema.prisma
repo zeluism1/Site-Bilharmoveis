@@ -1,0 +1,59 @@
+// This is your Prisma schema file,
+// learn more about it in the docs: https://pris.ly/d/prisma-schema
+
+generator client {
+  provider = "prisma-client-js"
+  output   = "../src/generated/prisma"
+}
+
+datasource db {
+  provider = "sqlite"
+  url      = env("DATABASE_URL")
+}
+
+model ProductModel {
+  id                     String   @id @default(cuid())
+  modelName              String
+  displayNamePT          String
+  displayNameEN          String
+  displayNameES          String
+  category               String
+  subcategory            String
+  productType            String
+  baseDescriptionPT      String
+  baseDescriptionEN      String
+  baseDescriptionES      String
+  baseFeatures           String   @default("[]") // JSON array of strings
+  baseMaterials          String   @default("[]") // JSON array of strings
+  dimensionsWidth        Float
+  dimensionsHeight       Float
+  dimensionsDepth        Float
+  dimensionsUnit         String
+  weight                 Float
+  defaultVariantId       String?  @unique // Foreign key to default variant
+  relatedProductModelIds String   @default("[]") // JSON array of strings
+  createdAt              DateTime @default(now())
+  updatedAt              DateTime @updatedAt
+
+  // Relationships
+  variants       ProductVariant[] // One-to-many relationship
+  defaultVariant ProductVariant?  @relation("DefaultVariant", fields: [defaultVariantId], references: [id])
+}
+
+model ProductVariant {
+  id             String   @id @default(cuid())
+  modelId        String // Foreign key to ProductModel
+  colorKey       String
+  colorNamePT    String
+  colorNameEN    String
+  colorNameES    String
+  colorHex       String
+  mainImageURL   String?
+  angleImageURLs String   @default("[]") // JSON array of strings
+  createdAt      DateTime @default(now())
+  updatedAt      DateTime @updatedAt
+
+  // Relationships
+  model           ProductModel  @relation(fields: [modelId], references: [id], onDelete: Cascade)
+  defaultForModel ProductModel? @relation("DefaultVariant")
+}

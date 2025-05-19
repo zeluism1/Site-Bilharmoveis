@@ -7,15 +7,42 @@ import { X, ChevronLeft, ChevronRight } from "lucide-react"
 import { useTranslation } from 'react-i18next'; // Import for getting current language
 
 import { Button } from "@/components/ui/button"
-import {
-  ProductModel,
-  ProductVariant,
-  ProductColor,
-  getLocalizedField
-} from "@/lib/products/data"
+import { ApiProductModel, ApiProductVariant, ProductColorData, I18nString } from "@/types/product"
+import { getLocalizedField } from "@/lib/products/data"
+
+// Category translations
+const categoryNameMappings: Record<string, I18nString> = {
+  Interior: { en: "Indoor", pt: "Interior", es: "Interior" },
+  Exterior: { en: "Outdoor", pt: "Exterior", es: "Exterior" },
+}
+
+// Common subcategory translations
+const subcategoryNameMappings: Record<string, I18nString> = {
+  // Main product types
+  Bancos: { en: "Stools", pt: "Bancos", es: "Banquetas" },
+  Cadeiras: { en: "Chairs", pt: "Cadeiras", es: "Sillas" },
+  Mesas: { en: "Tables", pt: "Mesas", es: "Mesas" },
+  Sofás: { en: "Sofas", pt: "Sofás", es: "Sofás" },
+  // Common variations
+  "Mesas de Centro": { en: "Coffee Tables", pt: "Mesas de Centro", es: "Mesas de Centro" },
+  "Mesas Laterais": { en: "Side Tables", pt: "Mesas Laterais", es: "Mesas Auxiliares" },
+  "Mesas de Jantar": { en: "Dining Tables", pt: "Mesas de Jantar", es: "Mesas de Comedor" },
+  "Bancos Altos": { en: "Bar Stools", pt: "Bancos Altos", es: "Taburetes Altos" },
+  "Bancos de Bar": { en: "Bar Stools", pt: "Bancos de Bar", es: "Taburetes de Bar" },
+  "Mesas Altas": { en: "High Tables", pt: "Mesas Altas", es: "Mesas Altas" },
+}
+
+// Helper functions for translations
+function getTranslatedCategory(category: string, lang: string): string {
+  return getLocalizedField(categoryNameMappings[category], lang) || category;
+}
+
+function getTranslatedSubcategory(subcategory: string, lang: string): string {
+  return getLocalizedField(subcategoryNameMappings[subcategory], lang) || subcategory;
+}
 
 type ProductModalProps = {
-  model: ProductModel | null
+  model: ApiProductModel | null
   isOpen: boolean
   onClose: () => void
   // currentLang prop is no longer strictly needed if we use i18n.language from react-i18next
@@ -29,25 +56,24 @@ export default function ProductModal({
   const { i18n } = useTranslation();
   const currentLang = i18n.language; // Get current language from react-i18next
 
-  const [selectedVariant, setSelectedVariant] = useState<ProductVariant | null>(null)
+  const [selectedVariant, setSelectedVariant] = useState<ApiProductVariant | null>(null)
   const [currentImageIndex, setCurrentImageIndex] = useState(0)
-  const [selectedSeatColor, setSelectedSeatColor] = useState<ProductColor | null>(null);
+  const [selectedSeatColor, setSelectedSeatColor] = useState<ProductColorData | null>(null);
 
   useEffect(() => {
     if (isOpen && model) {
-      const defaultVariant = model.variants.find(v => v.id === model.defaultVariantId) || model.variants[0];
-      if (defaultVariant) {
-        setSelectedVariant(defaultVariant);
-        setCurrentImageIndex(0);
-        if (defaultVariant.seatColors && defaultVariant.seatColors.length > 0) {
-          setSelectedSeatColor(defaultVariant.seatColors[0]);
-        } else {
-          setSelectedSeatColor(null);
-        }
+      const initialVariant = model.defaultVariant || (model.variants && model.variants[0]) || null;
+      setSelectedVariant(initialVariant);
+      setCurrentImageIndex(0);
+      if (initialVariant && initialVariant.seatColors && initialVariant.seatColors.length > 0) {
+        setSelectedSeatColor(initialVariant.seatColors[0]);
       } else {
-        setSelectedVariant(null);
         setSelectedSeatColor(null);
       }
+    } else if (!isOpen) {
+      setSelectedVariant(null);
+      setCurrentImageIndex(0);
+      setSelectedSeatColor(null);
     }
   }, [model, isOpen]);
 
@@ -67,13 +93,17 @@ export default function ProductModal({
 
   const imagePaths = useMemo(() => {
     if (!selectedVariant) return [];
-    return [
-      selectedVariant.images.main,
-      ...selectedVariant.images.angles
-    ].filter(Boolean);
+    const paths: string[] = [];
+    if (selectedVariant.mainImageURL) {
+      paths.push(selectedVariant.mainImageURL);
+    }
+    if (selectedVariant.angleImageURLs) {
+      paths.push(...selectedVariant.angleImageURLs);
+    }
+    return paths.filter(Boolean);
   }, [selectedVariant]);
 
-  const handleVariantSelect = (variant: ProductVariant) => {
+  const handleVariantSelect = (variant: ApiProductVariant) => {
     setSelectedVariant(variant);
     setCurrentImageIndex(0);
     if (variant.seatColors && variant.seatColors.length > 0) {
@@ -83,7 +113,7 @@ export default function ProductModal({
     }
   };
   
-  const handleSeatColorSelect = (color: ProductColor) => {
+  const handleSeatColorSelect = (color: ProductColorData) => {
     setSelectedSeatColor(color);
   };
 
@@ -98,12 +128,13 @@ export default function ProductModal({
   }
 
   const modelDisplayName = getLocalizedField(model.displayName, currentLang);
-  const selectedVariantColorName = getLocalizedField(selectedVariant.color.name, currentLang);
+  const selectedVariantColorName = getLocalizedField(selectedVariant.colorName, currentLang);
   const selectedSeatColorName = selectedSeatColor ? getLocalizedField(selectedSeatColor.name, currentLang) : "";
 
   // For displaying subcategory - using the value directly from model.subcategory
   // If model.subcategory itself becomes an I18nString, use getLocalizedField(model.subcategory, currentLang)
   const subcategoryDisplayName = model.subcategory; 
+  const baseDescriptionLocalized = getLocalizedField(model.baseDescription, currentLang);
 
   return (
     <div 
@@ -167,7 +198,7 @@ export default function ProductModal({
                 <div className="grid grid-cols-4 sm:grid-cols-5 gap-2">
                   {imagePaths.map((path, index) => (
                     <button
-                      key={path + index}
+                      key={path + '-' + index}
                       onClick={() => setCurrentImageIndex(index)}
                       className={`relative aspect-square rounded-md overflow-hidden border-2 transition-all ${
                         currentImageIndex === index ? 'border-orange-500 ring-1 ring-orange-500 ring-offset-1' : 'border-gray-200 hover:border-gray-400'
@@ -190,7 +221,7 @@ export default function ProductModal({
               <div>
                 <h1 className="text-2xl lg:text-3xl font-semibold text-gray-900 mb-1">{modelDisplayName}</h1>
                 <p className="text-sm text-gray-500">
-                    {model.category} • {subcategoryDisplayName} {/* Corrected line */}
+                    {getTranslatedCategory(model.category, currentLang)} • {getTranslatedSubcategory(model.subcategory, currentLang)}
                 </p>
               </div>
 
@@ -203,12 +234,12 @@ export default function ProductModal({
                   {model.variants.map(variant => (
                     <button
                       key={variant.id}
-                      title={getLocalizedField(variant.color.name, currentLang)}
+                      title={getLocalizedField(variant.colorName, currentLang)}
                       onClick={() => handleVariantSelect(variant)}
                       aria-pressed={selectedVariant.id === variant.id}
                       className={`w-7 h-7 rounded-full border-2 outline-none focus-visible:ring-2 focus-visible:ring-offset-1 focus-visible:ring-orange-500 transition-all duration-150
                         ${selectedVariant.id === variant.id ? 'border-orange-500 scale-110 shadow-md' : 'border-gray-300 hover:border-gray-500'}`}
-                      style={{ backgroundColor: variant.color.hex }}
+                      style={{ backgroundColor: variant.colorHex }}
                     />
                   ))}
                 </div>
@@ -226,9 +257,9 @@ export default function ProductModal({
                         key={sc.hex + (sc.key || '')}
                         title={getLocalizedField(sc.name, currentLang)}
                         onClick={() => handleSeatColorSelect(sc)}
-                        aria-pressed={selectedSeatColor?.hex === sc.hex}
+                        aria-pressed={selectedSeatColor?.key === sc.key}
                         className={`w-7 h-7 rounded-full border-2 outline-none focus-visible:ring-2 focus-visible:ring-offset-1 focus-visible:ring-blue-500 transition-all duration-150
-                            ${selectedSeatColor?.hex === sc.hex ? 'border-blue-500 scale-110 shadow-md' : 'border-gray-300 hover:border-gray-500'}`}
+                            ${selectedSeatColor?.key === sc.key ? 'border-blue-500 scale-110 shadow-md' : 'border-gray-300 hover:border-gray-500'}`}
                         style={{ backgroundColor: sc.hex }}
                       />
                     ))}
@@ -237,14 +268,14 @@ export default function ProductModal({
               )}
               
               <div className="prose prose-sm prose-gray max-w-none pt-2">
-                <p>{getLocalizedField(model.baseDescription, currentLang)}</p>
+                <p>{baseDescriptionLocalized}</p>
               </div>
               
               {model.baseFeatures && model.baseFeatures.length > 0 && (
                 <div>
                   <h3 className="text-base font-medium text-gray-900 mb-2">{getLocalizedField({pt: "Características", en: "Features", es: "Características"}, currentLang)}</h3>
                   <ul className="list-disc pl-5 space-y-1 text-sm text-gray-600">
-                    {model.baseFeatures.map((feature, index) => (
+                    {model.baseFeatures.map((feature: string, index: number) => (
                       <li key={index}>{feature}</li>
                     ))}
                   </ul>
@@ -256,7 +287,9 @@ export default function ProductModal({
                 <div className="grid grid-cols-2 gap-x-4 gap-y-2 text-sm">
                   <div>
                     <p className="text-gray-500">{getLocalizedField({pt: "Dimensões", en: "Dimensions", es: "Dimensiones"}, currentLang)}</p>
-                    <p className="font-medium text-gray-700">{model.dimensions.width} x {model.dimensions.height} x {model.dimensions.depth} {model.dimensions.unit}</p>
+                    <p className="font-medium text-gray-700">
+                        {`${model.dimensionsWidth} x ${model.dimensionsHeight} x ${model.dimensionsDepth} ${model.dimensionsUnit}`}
+                    </p>
                   </div>
                   <div>
                     <p className="text-gray-500">{getLocalizedField({pt: "Peso", en: "Weight", es: "Peso"}, currentLang)}</p>
