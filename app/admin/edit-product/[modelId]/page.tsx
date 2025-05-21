@@ -1,407 +1,888 @@
 'use client';
 
-import React, { useState, useEffect, useCallback } from 'react';
+import React, { useState, useEffect } from 'react';
+import { useRouter, useParams } from 'next/navigation';
 import { useForm, useFieldArray, Controller } from 'react-hook-form';
 import { zodResolver } from '@hookform/resolvers/zod';
 import * as z from 'zod';
-import { useRouter, useParams } from 'next/navigation';
 import { Button } from '@/components/ui/button';
+import {
+  Form,
+  FormControl,
+  FormDescription,
+  FormField,
+  FormItem,
+  FormLabel,
+  FormMessage,
+} from '@/components/ui/form';
 import { Input } from '@/components/ui/input';
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from '@/components/ui/select';
 import { Textarea } from '@/components/ui/textarea';
+import { useToast } from '@/components/ui/use-toast';
+import { Card, CardContent, CardHeader, CardTitle, CardDescription, CardFooter } from '@/components/ui/card';
 import { Label } from '@/components/ui/label';
-import { Card, CardContent, CardDescription, CardFooter, CardHeader, CardTitle } from "@/components/ui/card";
-import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
-import { PlusCircle, Trash2 } from 'lucide-react';
+import { Trash2, Plus, Upload, Check, ChevronsUpDown } from 'lucide-react';
+import { cn } from '@/lib/utils';
+import { Command, CommandEmpty, CommandGroup, CommandInput, CommandItem } from "@/components/ui/command"
+import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover"
+import useSWR from 'swr';
 
-// Schema (can be imported from add-product or a shared location if identical)
+// Form Schema
 const variantSchema = z.object({
   id: z.string().optional(), // For existing variants
   colorKey: z.string().min(1, 'Color key is required'),
-  colorHex: z.string().regex(/^#[0-9A-F]{6}$/i, 'Invalid hex color').optional().or(z.literal('')),
-  colorNamePT: z.string().min(1, 'Portuguese color name is required'),
-  colorNameEN: z.string().optional(),
-  colorNameES: z.string().optional(),
-  mainImageURL: z.string().min(1, 'Main image URL is required'),
-  angleImageURLs: z.array(z.string().url()).optional(),
+  colorName: z.object({
+    pt: z.string().min(1, 'Portuguese color name is required'),
+    en: z.string().optional(),
+    es: z.string().optional(),
+  }),
+  colorHex: z.string().regex(/^#[0-9A-F]{6}$/i, 'Invalid hex color'),
+  mainImageURL: z.string().refine((value) => {
+    // Accept both URLs and local paths
+    return value.startsWith('http') || value.startsWith('https') || value.startsWith('/images/');
+  }, 'Invalid image path or URL'),
+  angleImageURLs: z.array(z.string().refine((value) => {
+    // Accept both URLs and local paths
+    return value.startsWith('http') || value.startsWith('https') || value.startsWith('/images/');
+  }, 'Invalid image path or URL')),
 });
 
-const productFormSchema = z.object({
+const productSchema = z.object({
   modelName: z.string().min(1, 'Model name is required'),
-  displayNamePT: z.string().min(1, 'Portuguese display name is required'),
-  displayNameEN: z.string().optional(),
-  displayNameES: z.string().optional(),
+  displayName: z.object({
+    pt: z.string().min(1, 'Portuguese name is required'),
+    en: z.string().optional(),
+    es: z.string().optional(),
+  }),
   category: z.string().min(1, 'Category is required'),
-  subcategory: z.string().optional(),
-  productType: z.enum(['silla', 'mesa', 'sofa', 'cama', 'armario', 'estante', 'otro']),
-  baseDescriptionPT: z.string().min(1, 'Portuguese description is required'),
-  baseDescriptionEN: z.string().optional(),
-  baseDescriptionES: z.string().optional(),
-  baseFeatures: z.array(z.string()).optional(), // Simplified
-  baseMaterials: z.array(z.string()).optional(), // Simplified
+  subcategory: z.string().min(1, 'Subcategory is required'),
+  baseDescription: z.object({
+    pt: z.string().min(1, 'Portuguese description is required'),
+    en: z.string().optional(),
+    es: z.string().optional(),
+  }),
+  baseFeatures: z.array(z.string()),
+  baseMaterials: z.array(z.string()),
   dimensions: z.object({
-    width: z.number().positive().optional(),
-    height: z.number().positive().optional(),
-    depth: z.number().positive().optional(),
-    unit: z.string().optional(),
-  }).optional(),
-  weight: z.number().positive().optional(),
+    width: z.number().min(0),
+    height: z.number().min(0),
+    depth: z.number().min(0),
+    unit: z.string(),
+  }),
+  weight: z.number().min(0),
   variants: z.array(variantSchema).min(1, 'At least one variant is required'),
-  defaultVariantIndex: z.number().min(0, 'Default variant must be selected').optional(),
+  defaultVariantIndex: z.number().min(0),
 });
 
-type ProductFormData = z.infer<typeof productFormSchema>;
+type ProductFormValues = z.infer<typeof productSchema>;
+
+const defaultVariant = {
+  colorKey: '',
+  colorName: { pt: '', en: '', es: '' },
+  colorHex: '#000000',
+  mainImageURL: '',
+  angleImageURLs: [],
+};
+
+const fetcher = async (url: string) => {
+  const res = await fetch(url);
+  if (!res.ok) {
+    throw new Error('Failed to fetch data');
+  }
+  return res.json();
+};
+
+// Add type definitions for the API response
+interface ApiResponse {
+  data: Array<{
+    id: string;
+    category: string;
+    subcategory: string;
+  }>;
+}
 
 export default function EditProductPage() {
+  const [isSubmitting, setIsSubmitting] = useState(false);
+  const [isUploading, setIsUploading] = useState(false);
+  const [openCategory, setOpenCategory] = useState(false);
+  const [openSubcategory, setOpenSubcategory] = useState(false);
+  const [newCategory, setNewCategory] = useState("");
+  const [newSubcategory, setNewSubcategory] = useState("");
+  const [isFetchingData, setIsFetchingData] = useState(true);
   const router = useRouter();
   const params = useParams();
   const modelId = params.modelId as string;
+  const { toast } = useToast();
 
-  const [isLoading, setIsLoading] = useState(false);
-  const [isFetchingData, setIsFetchingData] = useState(true);
-  const [error, setError] = useState<string | null>(null);
-  const [productName, setProductName] = useState('');
+  // Fetch existing categories and subcategories with proper typing
+  const { data: productsData, error: productsError } = useSWR<ApiResponse>('/api/products?page=1&limit=100', fetcher);
+  
+  // Extract unique categories and subcategories with proper typing
+  const categories = Array.from(new Set(productsData?.data?.map(p => p.category) || []));
+  const subcategories = Array.from(new Set(productsData?.data?.map(p => p.subcategory) || []));
 
-  const {
-    control,
-    register,
-    handleSubmit,
-    formState: { errors },
-    reset, // Used to populate form with fetched data
-    setValue,
-    watch
-  } = useForm<ProductFormData>({
-    resolver: zodResolver(productFormSchema),
+  const form = useForm<ProductFormValues>({
+    resolver: zodResolver(productSchema),
     defaultValues: {
       modelName: '',
-      displayNamePT: '',
+      displayName: { pt: '', en: '', es: '' },
       category: '',
-      productType: 'silla',
-      baseDescriptionPT: '',
-      variants: [],
+      subcategory: '',
+      baseDescription: { pt: '', en: '', es: '' },
       baseFeatures: [],
       baseMaterials: [],
+      dimensions: { width: 0, height: 0, depth: 0, unit: 'cm' },
+      weight: 0,
+      variants: [defaultVariant],
       defaultVariantIndex: 0,
     },
   });
 
-  const { fields, append, remove, replace } = useFieldArray({
-    control,
+  const { fields, append, remove } = useFieldArray({
+    control: form.control,
     name: 'variants',
   });
 
-  const watchedVariants = watch('variants');
-
-  const fetchProductData = useCallback(async () => {
-    if (!modelId) return;
-    setIsFetchingData(true);
-    setError(null);
-    try {
-      const response = await fetch(`/api/admin/products/${modelId}`);
-      if (!response.ok) {
-        throw new Error(`Failed to fetch product data: ${response.statusText}`);
-      }
-      const data = await response.json();
-      
-      // Map API data to form data structure
-      // This needs to align with your actual ProductModel and API response
-      const defaultVariant = data.variants?.find((v: any) => v.isDefault);
-      const defaultVariantIdx = defaultVariant ? data.variants.indexOf(defaultVariant) : 0;
-
-      const formData: ProductFormData = {
-        modelName: data.modelName || '',
-        displayNamePT: data.displayName?.pt || '',
-        displayNameEN: data.displayName?.en || '',
-        displayNameES: data.displayName?.es || '',
-        category: data.category || '',
-        subcategory: data.subcategory || '',
-        productType: data.productType || 'silla',
-        baseDescriptionPT: data.baseDescription?.pt || '',
-        baseDescriptionEN: data.baseDescription?.en || '',
-        baseDescriptionES: data.baseDescription?.es || '',
-        baseFeatures: data.baseFeatures || [],
-        baseMaterials: data.baseMaterials || [],
-        dimensions: data.dimensions || {},
-        weight: data.weight || undefined,
-        variants: data.variants?.map((v: any) => ({
-          id: v.id, // Keep track of existing variant IDs
-          colorKey: v.colorKey || '',
-          colorHex: v.colorHex || '',
-          colorNamePT: v.colorName?.pt || '',
-          colorNameEN: v.colorName?.en || '',
-          colorNameES: v.colorName?.es || '',
-          mainImageURL: v.mainImageURL || '',
-          angleImageURLs: v.angleImageURLs || [],
-        })) || [],
-        defaultVariantIndex: defaultVariantIdx,
-      };
-      reset(formData); // Populate the form
-      setProductName(formData.displayNamePT || formData.modelName); // For page title
-
-    } catch (err) {
-      setError(err instanceof Error ? err.message : 'An unknown error occurred while fetching product data.');
-      console.error("Error fetching product data:", err);
-    } finally {
-      setIsFetchingData(false);
-    }
-  }, [modelId, reset]);
-
+  // Watch model name changes and update display names
+  const modelName = form.watch('modelName');
   useEffect(() => {
-    fetchProductData();
-  }, [fetchProductData]);
+    if (modelName) {
+      form.setValue('displayName.pt', modelName);
+      form.setValue('displayName.en', modelName);
+      form.setValue('displayName.es', modelName);
+    }
+  }, [modelName, form]);
 
-  const onSubmit = async (data: ProductFormData) => {
-    setIsLoading(true);
-    setError(null);
-
-    const finalData = {
-        ...data,
-        defaultVariantIndex: data.defaultVariantIndex ?? 0,
-        baseFeatures: typeof data.baseFeatures === 'string' ? (data.baseFeatures as string).split(',').map(s => s.trim()).filter(s => s) : data.baseFeatures || [],
-        baseMaterials: typeof data.baseMaterials === 'string' ? (data.baseMaterials as string).split(',').map(s => s.trim()).filter(s => s) : data.baseMaterials || [],
-      };
-
-    console.log("Submitting updated product data:", finalData);
-
+  const handleImageUpload = async (file: File, index: number, isAngleImage: boolean = false): Promise<string> => {
+    setIsUploading(true);
     try {
-      const response = await fetch(`/api/admin/products/${modelId}`, {
-        method: 'PUT',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify(finalData),
+      const formData = new FormData();
+      formData.append('file', file);
+      formData.append('category', form.getValues('category'));
+      formData.append('subcategory', form.getValues('subcategory') || 'default');
+      formData.append('modelName', form.getValues('modelName'));
+
+      const response = await fetch('/api/products/upload', {
+        method: 'POST',
+        body: formData,
       });
 
       if (!response.ok) {
-        const errorData = await response.json();
-        throw new Error(errorData.message || 'Failed to update product');
+        throw new Error('Failed to upload image');
       }
-      const result = await response.json();
-      console.log('Product updated:', result);
-      // TODO: Show success toast/message
-      router.push('/admin/products');
-    } catch (err) {
-      setError(err instanceof Error ? err.message : 'An unknown error occurred');
-      console.error("Error updating product:", err);
+
+      const data = await response.json();
+      
+      if (isAngleImage) {
+        const currentAngleImages = form.getValues(`variants.${index}.angleImageURLs`) || [];
+        form.setValue(`variants.${index}.angleImageURLs`, [...currentAngleImages, data.url]);
+      } else {
+        form.setValue(`variants.${index}.mainImageURL`, data.url);
+      }
+
+      return data.url;
+    } catch (error) {
+      console.error('Error uploading image:', error);
+      toast({
+        title: 'Error',
+        description: 'Failed to upload image. Please try again.',
+        variant: 'destructive',
+      });
+      throw error;
     } finally {
-      setIsLoading(false);
+      setIsUploading(false);
+    }
+  };
+
+  // Fetch product data on component mount
+  React.useEffect(() => {
+    const fetchProductData = async () => {
+      if (!modelId) return;
+      setIsFetchingData(true);
+      try {
+        const response = await fetch(`/api/products/${modelId}`);
+        if (!response.ok) {
+          throw new Error('Failed to fetch product data');
+        }
+        const data = await response.json();
+        
+        // Transform API data to form data structure
+        const formData = {
+          modelName: data.modelName,
+          displayName: {
+            pt: data.displayName.pt,
+            en: data.displayName.en,
+            es: data.displayName.es,
+          },
+          category: data.category,
+          subcategory: data.subcategory,
+          baseDescription: {
+            pt: data.baseDescription.pt,
+            en: data.baseDescription.en,
+            es: data.baseDescription.es,
+          },
+          baseFeatures: data.baseFeatures,
+          baseMaterials: data.baseMaterials,
+          dimensions: {
+            width: data.dimensionsWidth,
+            height: data.dimensionsHeight,
+            depth: data.dimensionsDepth,
+            unit: data.dimensionsUnit,
+          },
+          weight: data.weight,
+          variants: data.variants.map((v: any) => ({
+            id: v.id,
+            colorKey: v.colorKey,
+            colorName: {
+              pt: v.colorName.pt,
+              en: v.colorName.en,
+              es: v.colorName.es,
+            },
+            colorHex: v.colorHex,
+            mainImageURL: v.mainImageURL,
+            angleImageURLs: v.angleImageURLs,
+          })),
+          defaultVariantIndex: data.variants.findIndex((v: any) => v.id === data.defaultVariantId),
+        };
+        
+        form.reset(formData);
+      } catch (error) {
+        console.error('Error fetching product:', error);
+        toast({
+          title: 'Error',
+          description: 'Failed to fetch product data',
+          variant: 'destructive',
+        });
+      } finally {
+        setIsFetchingData(false);
+      }
+    };
+
+    fetchProductData();
+  }, [modelId, form]);
+
+  const onSubmit = async (data: ProductFormValues) => {
+    setIsSubmitting(true);
+    try {
+      const response = await fetch(`/api/products/${modelId}`, {
+        method: 'PUT',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(data),
+      });
+
+      if (!response.ok) {
+        throw new Error('Failed to update product');
+      }
+
+      toast({
+        title: 'Success',
+        description: 'Product updated successfully',
+      });
+
+      router.push('/admin/products');
+    } catch (error) {
+      console.error('Error updating product:', error);
+      toast({
+        title: 'Error',
+        description: 'Failed to update product. Please try again.',
+        variant: 'destructive',
+      });
+    } finally {
+      setIsSubmitting(false);
     }
   };
 
   if (isFetchingData) {
-    return <div className="flex justify-center items-center h-screen"><p>Loading product data...</p></div>;
+    return (
+      <div className="flex justify-center items-center h-screen">
+        <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-gray-900"></div>
+      </div>
+    );
   }
 
   return (
-    <div className="container mx-auto py-8 px-4 md:px-6">
-      <Card className="max-w-4xl mx-auto">
-        <CardHeader>
-          <CardTitle>Edit Product: {productName || 'Loading...'}</CardTitle>
-          <CardDescription>Modify the details for the product model and its variants.</CardDescription>
-        </CardHeader>
-        <form onSubmit={handleSubmit(onSubmit)}>
-          <CardContent className="space-y-6">
-            {error && (
-              <div className="bg-red-100 border border-red-400 text-red-700 px-4 py-3 rounded" role="alert">
-                <p><span className="font-bold">Error:</span> {error}</p>
-              </div>
-            )}
+    <div className="p-8">
+      <h1 className="text-2xl font-bold mb-6">Edit Product</h1>
 
-            <section>
-              <h3 className="text-lg font-medium mb-3">Model Information</h3>
+      <Form {...form}>
+        <form onSubmit={form.handleSubmit(onSubmit)} className="space-y-8">
+          {/* Basic Information */}
+          <Card>
+            <CardContent className="pt-6 space-y-4">
+              <FormField
+                control={form.control}
+                name="modelName"
+                render={({ field }) => (
+                  <FormItem>
+                    <FormLabel>Model Name</FormLabel>
+                    <FormControl>
+                      <Input {...field} />
+                    </FormControl>
+                    <FormMessage />
+                  </FormItem>
+                )}
+              />
+
+              <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+                <FormField
+                  control={form.control}
+                  name="displayName.pt"
+                  render={({ field }) => (
+                    <FormItem>
+                      <FormLabel>Display Name (PT)</FormLabel>
+                      <FormControl>
+                        <Input {...field} />
+                      </FormControl>
+                      <FormMessage />
+                    </FormItem>
+                  )}
+                />
+                <FormField
+                  control={form.control}
+                  name="displayName.en"
+                  render={({ field }) => (
+                    <FormItem>
+                      <FormLabel>Display Name (EN)</FormLabel>
+                      <FormControl>
+                        <Input {...field} />
+                      </FormControl>
+                      <FormMessage />
+                    </FormItem>
+                  )}
+                />
+                <FormField
+                  control={form.control}
+                  name="displayName.es"
+                  render={({ field }) => (
+                    <FormItem>
+                      <FormLabel>Display Name (ES)</FormLabel>
+                      <FormControl>
+                        <Input {...field} />
+                      </FormControl>
+                      <FormMessage />
+                    </FormItem>
+                  )}
+                />
+              </div>
+
               <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                <div>
-                  <Label htmlFor="modelName">Model Name (Internal)</Label>
-                  <Input id="modelName" {...register('modelName')} />
-                  {errors.modelName && <p className="text-red-500 text-sm mt-1">{errors.modelName.message}</p>}
-                </div>
-                <div>
-                  <Label htmlFor="productType">Product Type</Label>
-                  <Controller
-                    name="productType"
-                    control={control}
-                    render={({ field }) => (
-                      <Select onValueChange={field.onChange} value={field.value} defaultValue={field.value}>
-                        <SelectTrigger id="productType">
-                          <SelectValue placeholder="Select product type" />
-                        </SelectTrigger>
-                        <SelectContent>
-                          <SelectItem value="silla">Silla (Chair)</SelectItem>
-                          <SelectItem value="mesa">Mesa (Table)</SelectItem>
-                          <SelectItem value="sofa">Sofá (Sofa)</SelectItem>
-                          <SelectItem value="cama">Cama (Bed)</SelectItem>
-                          <SelectItem value="armario">Armario (Wardrobe)</SelectItem>
-                          <SelectItem value="estante">Estante (Shelf)</SelectItem>
-                          <SelectItem value="otro">Otro (Other)</SelectItem>
-                        </SelectContent>
-                      </Select>
-                    )}
-                  />
-                  {errors.productType && <p className="text-red-500 text-sm mt-1">{errors.productType.message}</p>}
-                </div>
-              </div>
-              
-              <div className="grid grid-cols-1 md:grid-cols-3 gap-4 mt-4">
-                <div>
-                  <Label htmlFor="displayNamePT">Display Name (PT)</Label>
-                  <Input id="displayNamePT" {...register('displayNamePT')} />
-                  {errors.displayNamePT && <p className="text-red-500 text-sm mt-1">{errors.displayNamePT.message}</p>}
-                </div>
-                <div>
-                  <Label htmlFor="displayNameEN">Display Name (EN)</Label>
-                  <Input id="displayNameEN" {...register('displayNameEN')} />
-                </div>
-                <div>
-                  <Label htmlFor="displayNameES">Display Name (ES)</Label>
-                  <Input id="displayNameES" {...register('displayNameES')} />
-                </div>
-              </div>
+                <FormField
+                  control={form.control}
+                  name="category"
+                  render={({ field }) => (
+                    <FormItem className="flex flex-col">
+                      <FormLabel>Category</FormLabel>
+                      <Popover open={openCategory} onOpenChange={setOpenCategory}>
+                        <PopoverTrigger asChild>
+                          <FormControl>
+                            <Button
+                              variant="outline"
+                              role="combobox"
+                              aria-expanded={openCategory}
+                              className={cn(
+                                "w-full justify-between",
+                                !field.value && "text-muted-foreground"
+                              )}
+                            >
+                              {field.value || "Select category"}
+                              <ChevronsUpDown className="ml-2 h-4 w-4 shrink-0 opacity-50" />
+                            </Button>
+                          </FormControl>
+                        </PopoverTrigger>
+                        <PopoverContent className="w-full p-0">
+                          <Command>
+                            <CommandInput 
+                              placeholder="Search or add new category"
+                              value={newCategory}
+                              onValueChange={setNewCategory}
+                            />
+                            <CommandEmpty>
+                              <Button
+                                type="button"
+                                variant="ghost"
+                                className="w-full justify-start"
+                                onClick={() => {
+                                  field.onChange(newCategory);
+                                  setOpenCategory(false);
+                                }}
+                              >
+                                Add "{newCategory}"
+                              </Button>
+                            </CommandEmpty>
+                            <CommandGroup>
+                              {categories.map((category: string) => (
+                                <CommandItem
+                                  key={category}
+                                  value={category}
+                                  onSelect={() => {
+                                    field.onChange(category);
+                                    setOpenCategory(false);
+                                  }}
+                                >
+                                  <Check
+                                    className={cn(
+                                      "mr-2 h-4 w-4",
+                                      field.value === category ? "opacity-100" : "opacity-0"
+                                    )}
+                                  />
+                                  {category}
+                                </CommandItem>
+                              ))}
+                            </CommandGroup>
+                          </Command>
+                        </PopoverContent>
+                      </Popover>
+                      <FormMessage />
+                    </FormItem>
+                  )}
+                />
 
-              <div className="grid grid-cols-1 md:grid-cols-2 gap-4 mt-4">
-                <div>
-                  <Label htmlFor="category">Category</Label>
-                  <Input id="category" {...register('category')} />
-                  {errors.category && <p className="text-red-500 text-sm mt-1">{errors.category.message}</p>}
-                </div>
-                 <div>
-                  <Label htmlFor="subcategory">Subcategory</Label>
-                  <Input id="subcategory" {...register('subcategory')} />
-                </div>
-              </div>
-
-              <div className="mt-4">
-                <Label htmlFor="baseDescriptionPT">Base Description (PT)</Label>
-                <Textarea id="baseDescriptionPT" {...register('baseDescriptionPT')} />
-                {errors.baseDescriptionPT && <p className="text-red-500 text-sm mt-1">{errors.baseDescriptionPT.message}</p>}
-              </div>
-              <div className="mt-4">
-                <Label htmlFor="baseDescriptionEN">Base Description (EN)</Label>
-                <Textarea id="baseDescriptionEN" {...register('baseDescriptionEN')} />
-              </div>
-              <div className="mt-4">
-                <Label htmlFor="baseDescriptionES">Base Description (ES)</Label>
-                <Textarea id="baseDescriptionES" {...register('baseDescriptionES')} />
-              </div>
-
-              <div className="mt-4">
-                <Label htmlFor="baseFeatures">Base Features (comma-separated)</Label>
-                <Controller
-                    name="baseFeatures"
-                    control={control}
-                    render={({ field }) => (
-                        <Textarea 
-                            id="baseFeatures" 
-                            placeholder="Feature 1, Feature 2, ..."
-                            value={Array.isArray(field.value) ? field.value.join(', ') : field.value || ''}
-                            onChange={(e) => field.onChange(e.target.value.split(',').map(s => s.trim()).filter(s => s))}
-                        />
-                    )}
+                <FormField
+                  control={form.control}
+                  name="subcategory"
+                  render={({ field }) => (
+                    <FormItem className="flex flex-col">
+                      <FormLabel>Subcategory</FormLabel>
+                      <Popover open={openSubcategory} onOpenChange={setOpenSubcategory}>
+                        <PopoverTrigger asChild>
+                          <FormControl>
+                            <Button
+                              variant="outline"
+                              role="combobox"
+                              aria-expanded={openSubcategory}
+                              className={cn(
+                                "w-full justify-between",
+                                !field.value && "text-muted-foreground"
+                              )}
+                            >
+                              {field.value || "Select subcategory"}
+                              <ChevronsUpDown className="ml-2 h-4 w-4 shrink-0 opacity-50" />
+                            </Button>
+                          </FormControl>
+                        </PopoverTrigger>
+                        <PopoverContent className="w-full p-0">
+                          <Command>
+                            <CommandInput 
+                              placeholder="Search or add new subcategory"
+                              value={newSubcategory}
+                              onValueChange={setNewSubcategory}
+                            />
+                            <CommandEmpty>
+                              <Button
+                                type="button"
+                                variant="ghost"
+                                className="w-full justify-start"
+                                onClick={() => {
+                                  field.onChange(newSubcategory);
+                                  setOpenSubcategory(false);
+                                }}
+                              >
+                                Add "{newSubcategory}"
+                              </Button>
+                            </CommandEmpty>
+                            <CommandGroup>
+                              {subcategories.map((subcategory: string) => (
+                                <CommandItem
+                                  key={subcategory}
+                                  value={subcategory}
+                                  onSelect={() => {
+                                    field.onChange(subcategory);
+                                    setOpenSubcategory(false);
+                                  }}
+                                >
+                                  <Check
+                                    className={cn(
+                                      "mr-2 h-4 w-4",
+                                      field.value === subcategory ? "opacity-100" : "opacity-0"
+                                    )}
+                                  />
+                                  {subcategory}
+                                </CommandItem>
+                              ))}
+                            </CommandGroup>
+                          </Command>
+                        </PopoverContent>
+                      </Popover>
+                      <FormMessage />
+                    </FormItem>
+                  )}
                 />
               </div>
-              <div className="mt-4">
-                <Label htmlFor="baseMaterials">Base Materials (comma-separated)</Label>
-                 <Controller
-                    name="baseMaterials"
-                    control={control}
-                    render={({ field }) => (
-                        <Textarea 
-                            id="baseMaterials" 
-                            placeholder="Material 1, Material 2, ..."
-                            value={Array.isArray(field.value) ? field.value.join(', ') : field.value || ''}
-                            onChange={(e) => field.onChange(e.target.value.split(',').map(s => s.trim()).filter(s => s))}
-                        />
-                    )}
+            </CardContent>
+          </Card>
+
+          {/* Description and Features */}
+          <Card>
+            <CardContent className="pt-6 space-y-4">
+              <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+                <FormField
+                  control={form.control}
+                  name="baseDescription.pt"
+                  render={({ field }) => (
+                    <FormItem>
+                      <FormLabel>Description (PT)</FormLabel>
+                      <FormControl>
+                        <Textarea {...field} />
+                      </FormControl>
+                      <FormMessage />
+                    </FormItem>
+                  )}
+                />
+                <FormField
+                  control={form.control}
+                  name="baseDescription.en"
+                  render={({ field }) => (
+                    <FormItem>
+                      <FormLabel>Description (EN)</FormLabel>
+                      <FormControl>
+                        <Textarea {...field} />
+                      </FormControl>
+                      <FormMessage />
+                    </FormItem>
+                  )}
+                />
+                <FormField
+                  control={form.control}
+                  name="baseDescription.es"
+                  render={({ field }) => (
+                    <FormItem>
+                      <FormLabel>Description (ES)</FormLabel>
+                      <FormControl>
+                        <Textarea {...field} />
+                      </FormControl>
+                      <FormMessage />
+                    </FormItem>
+                  )}
                 />
               </div>
-            </section>
+            </CardContent>
+          </Card>
 
-            <section className="mt-6 pt-6 border-t">
-              <div className="flex justify-between items-center mb-3">
-                <h3 className="text-lg font-medium">Variants</h3>
-                <Button type="button" variant="outline" size="sm" onClick={() => append({ id: undefined, colorKey: '', colorHex: '', colorNamePT: '', mainImageURL: '', angleImageURLs: [] } )}>
-                  <PlusCircle className="mr-2 h-4 w-4" /> Add Variant
+          {/* Dimensions and Weight */}
+          <Card>
+            <CardContent className="pt-6 space-y-4">
+              <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
+                <FormField
+                  control={form.control}
+                  name="dimensions.width"
+                  render={({ field }) => (
+                    <FormItem>
+                      <FormLabel>Width</FormLabel>
+                      <FormControl>
+                        <Input type="number" {...field} onChange={e => field.onChange(parseFloat(e.target.value))} />
+                      </FormControl>
+                      <FormMessage />
+                    </FormItem>
+                  )}
+                />
+                <FormField
+                  control={form.control}
+                  name="dimensions.height"
+                  render={({ field }) => (
+                    <FormItem>
+                      <FormLabel>Height</FormLabel>
+                      <FormControl>
+                        <Input type="number" {...field} onChange={e => field.onChange(parseFloat(e.target.value))} />
+                      </FormControl>
+                      <FormMessage />
+                    </FormItem>
+                  )}
+                />
+                <FormField
+                  control={form.control}
+                  name="dimensions.depth"
+                  render={({ field }) => (
+                    <FormItem>
+                      <FormLabel>Depth</FormLabel>
+                      <FormControl>
+                        <Input type="number" {...field} onChange={e => field.onChange(parseFloat(e.target.value))} />
+                      </FormControl>
+                      <FormMessage />
+                    </FormItem>
+                  )}
+                />
+                <FormField
+                  control={form.control}
+                  name="weight"
+                  render={({ field }) => (
+                    <FormItem>
+                      <FormLabel>Weight (kg)</FormLabel>
+                      <FormControl>
+                        <Input type="number" {...field} onChange={e => field.onChange(parseFloat(e.target.value))} />
+                      </FormControl>
+                      <FormMessage />
+                    </FormItem>
+                  )}
+                />
+              </div>
+            </CardContent>
+          </Card>
+
+          {/* Variants */}
+          <Card>
+            <CardContent className="pt-6">
+              <div className="flex justify-between items-center mb-4">
+                <h3 className="text-lg font-semibold">Variants</h3>
+                <Button
+                  type="button"
+                  variant="outline"
+                  size="sm"
+                  onClick={() => append(defaultVariant)}
+                >
+                  <Plus className="h-4 w-4 mr-2" />
+                  Add Variant
                 </Button>
               </div>
-              {errors.variants?.message && <p className="text-red-500 text-sm mb-2">{errors.variants.message}</p>}
-              
-              <div className="space-y-6">
+
+              <div className="space-y-4">
                 {fields.map((field, index) => (
-                  <div key={field.id} className="p-4 border rounded-md relative">
-                     <div className="flex justify-between items-start mb-2">
-                        <h4 className="font-medium text-md mb-1">Variant {index + 1} {field.id ? '(Existing)' : '(New)'}</h4>
-                        <Controller
-                            name={`defaultVariantIndex`}
-                            control={control}
-                            render={({ field: controllerField }) => (
-                                <label className="flex items-center text-sm space-x-2 cursor-pointer">
-                                <input
-                                    type="radio"
-                                    {...register('defaultVariantIndex')}
-                                    value={index}
-                                    checked={Number(watch('defaultVariantIndex')) === index}
-                                    onChange={(e) => setValue('defaultVariantIndex', parseInt(e.target.value, 10), { shouldValidate: true, shouldDirty: true })}
-                                    className="form-radio h-4 w-4"
-                                />
-                                <span>Set as Default Variant</span>
-                                </label>
-                            )}
+                  <div key={field.id} className="border rounded-lg p-4 space-y-4">
+                    <div className="flex justify-between items-center">
+                      <h4 className="font-medium">Variant {index + 1}</h4>
+                      <div className="flex items-center gap-2">
+                        <FormField
+                          control={form.control}
+                          name="defaultVariantIndex"
+                          render={({ field: defaultField }) => (
+                            <div className="flex items-center gap-2">
+                              <input
+                                type="radio"
+                                checked={defaultField.value === index}
+                                onChange={() => defaultField.onChange(index)}
+                                className="h-4 w-4"
+                              />
+                              <span className="text-sm">Default Variant</span>
+                            </div>
+                          )}
                         />
+                        {index > 0 && (
+                          <Button
+                            type="button"
+                            variant="ghost"
+                            size="sm"
+                            onClick={() => remove(index)}
+                          >
+                            <Trash2 className="h-4 w-4" />
+                          </Button>
+                        )}
+                      </div>
                     </div>
-                    {errors.variants?.[index]?.root && <p className="text-red-500 text-sm mt-1">{errors.variants[index]?.root?.message}</p>}
 
                     <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                      <div>
-                        <Label htmlFor={`variants.${index}.colorKey`}>Color Key</Label>
-                        <Input id={`variants.${index}.colorKey`} {...register(`variants.${index}.colorKey`)} />
-                        {errors.variants?.[index]?.colorKey && <p className="text-red-500 text-sm mt-1">{errors.variants[index]?.colorKey?.message}</p>}
-                      </div>
-                      <div>
-                        <Label htmlFor={`variants.${index}.colorHex`}>Color Hex (e.g. #FFFFFF)</Label>
-                        <Input id={`variants.${index}.colorHex`} {...register(`variants.${index}.colorHex`)} />
-                        {errors.variants?.[index]?.colorHex && <p className="text-red-500 text-sm mt-1">{errors.variants[index]?.colorHex?.message}</p>}
-                      </div>
-                    </div>
-                    <div className="grid grid-cols-1 md:grid-cols-3 gap-4 mt-4">
-                        <div>
-                            <Label htmlFor={`variants.${index}.colorNamePT`}>Color Name (PT)</Label>
-                            <Input id={`variants.${index}.colorNamePT`} {...register(`variants.${index}.colorNamePT`)} />
-                            {errors.variants?.[index]?.colorNamePT && <p className="text-red-500 text-sm mt-1">{errors.variants[index]?.colorNamePT?.message}</p>}
-                        </div>
-                         <div>
-                            <Label htmlFor={`variants.${index}.colorNameEN`}>Color Name (EN)</Label>
-                            <Input id={`variants.${index}.colorNameEN`} {...register(`variants.${index}.colorNameEN`)} />
-                        </div>
-                         <div>
-                            <Label htmlFor={`variants.${index}.colorNameES`}>Color Name (ES)</Label>
-                            <Input id={`variants.${index}.colorNameES`} {...register(`variants.${index}.colorNameES`)} />
-                        </div>
-                    </div>
-                    
-                    <div className="mt-4">
-                      <Label htmlFor={`variants.${index}.mainImageURL`}>Main Image URL</Label>
-                      <Input id={`variants.${index}.mainImageURL`} {...register(`variants.${index}.mainImageURL`)} placeholder="https://example.com/image.jpg"/>
-                      {errors.variants?.[index]?.mainImageURL && <p className="text-red-500 text-sm mt-1">{errors.variants[index]?.mainImageURL?.message}</p>}
+                      <FormField
+                        control={form.control}
+                        name={`variants.${index}.colorKey`}
+                        render={({ field }) => (
+                          <FormItem>
+                            <FormLabel>Color Key</FormLabel>
+                            <FormControl>
+                              <Input {...field} />
+                            </FormControl>
+                            <FormMessage />
+                          </FormItem>
+                        )}
+                      />
+                      <FormField
+                        control={form.control}
+                        name={`variants.${index}.colorHex`}
+                        render={({ field }) => (
+                          <FormItem>
+                            <FormLabel>Color Hex</FormLabel>
+                            <FormControl>
+                              <div className="flex gap-2">
+                                <Input {...field} />
+                                <input
+                                  type="color"
+                                  value={field.value}
+                                  onChange={(e) => field.onChange(e.target.value)}
+                                  className="w-10 h-10 p-1 rounded border cursor-pointer"
+                                />
+                              </div>
+                            </FormControl>
+                            <FormMessage />
+                          </FormItem>
+                        )}
+                      />
                     </div>
 
-                    {fields.length > 1 && (
-                      <Button type="button" variant="destructive" size="icon" className="absolute top-2 right-2 h-7 w-7" onClick={() => remove(index)}>
-                        <Trash2 className="h-4 w-4" />
-                        <span className="sr-only">Remove Variant</span>
-                      </Button>
-                    )}
+                    <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+                      <FormField
+                        control={form.control}
+                        name={`variants.${index}.colorName.pt`}
+                        render={({ field }) => (
+                          <FormItem>
+                            <FormLabel>Color Name (PT)</FormLabel>
+                            <FormControl>
+                              <Input {...field} />
+                            </FormControl>
+                            <FormMessage />
+                          </FormItem>
+                        )}
+                      />
+                      <FormField
+                        control={form.control}
+                        name={`variants.${index}.colorName.en`}
+                        render={({ field }) => (
+                          <FormItem>
+                            <FormLabel>Color Name (EN)</FormLabel>
+                            <FormControl>
+                              <Input {...field} />
+                            </FormControl>
+                            <FormMessage />
+                          </FormItem>
+                        )}
+                      />
+                      <FormField
+                        control={form.control}
+                        name={`variants.${index}.colorName.es`}
+                        render={({ field }) => (
+                          <FormItem>
+                            <FormLabel>Color Name (ES)</FormLabel>
+                            <FormControl>
+                              <Input {...field} />
+                            </FormControl>
+                            <FormMessage />
+                          </FormItem>
+                        )}
+                      />
+                    </div>
+
+                    <div className="space-y-4">
+                      <FormField
+                        control={form.control}
+                        name={`variants.${index}.mainImageURL`}
+                        render={({ field }) => (
+                          <FormItem>
+                            <FormLabel>Main Image</FormLabel>
+                            <FormControl>
+                              <div className="flex gap-2">
+                                <Input {...field} readOnly />
+                                <input
+                                  type="file"
+                                  accept="image/*"
+                                  className="hidden"
+                                  id={`main-image-${index}`}
+                                  onChange={async (e) => {
+                                    const file = e.target.files?.[0];
+                                    if (file) {
+                                      try {
+                                        await handleImageUpload(file, index);
+                                      } catch (error) {
+                                        console.error('Failed to upload image:', error);
+                                      }
+                                    }
+                                  }}
+                                />
+                                <Button
+                                  type="button"
+                                  variant="outline"
+                                  size="icon"
+                                  className="shrink-0"
+                                  onClick={() => document.getElementById(`main-image-${index}`)?.click()}
+                                  disabled={isUploading}
+                                >
+                                  <Upload className="h-4 w-4" />
+                                </Button>
+                              </div>
+                            </FormControl>
+                            <FormMessage />
+                          </FormItem>
+                        )}
+                      />
+
+                      <FormField
+                        control={form.control}
+                        name={`variants.${index}.angleImageURLs`}
+                        render={({ field }) => (
+                          <FormItem>
+                            <FormLabel>Angle Images</FormLabel>
+                            <FormControl>
+                              <div className="space-y-2">
+                                <div className="flex flex-wrap gap-2">
+                                  {field.value?.map((url, angleIndex) => (
+                                    <div key={angleIndex} className="relative">
+                                      <img
+                                        src={url}
+                                        alt={`Angle ${angleIndex + 1}`}
+                                        className="w-20 h-20 object-cover rounded"
+                                      />
+                                      <Button
+                                        type="button"
+                                        variant="destructive"
+                                        size="icon"
+                                        className="absolute -top-2 -right-2 h-6 w-6"
+                                        onClick={() => {
+                                          const newUrls = [...field.value];
+                                          newUrls.splice(angleIndex, 1);
+                                          form.setValue(`variants.${index}.angleImageURLs`, newUrls);
+                                        }}
+                                      >
+                                        <Trash2 className="h-3 w-3" />
+                                      </Button>
+                                    </div>
+                                  ))}
+                                </div>
+                                <div className="flex gap-2">
+                                  <input
+                                    type="file"
+                                    accept="image/*"
+                                    className="hidden"
+                                    id={`angle-image-${index}`}
+                                    onChange={async (e) => {
+                                      const file = e.target.files?.[0];
+                                      if (file) {
+                                        try {
+                                          await handleImageUpload(file, index, true);
+                                        } catch (error) {
+                                          console.error('Failed to upload image:', error);
+                                        }
+                                      }
+                                    }}
+                                  />
+                                  <Button
+                                    type="button"
+                                    variant="outline"
+                                    onClick={() => document.getElementById(`angle-image-${index}`)?.click()}
+                                    disabled={isUploading}
+                                  >
+                                    <Upload className="h-4 w-4 mr-2" />
+                                    Add Angle Image
+                                  </Button>
+                                </div>
+                              </div>
+                            </FormControl>
+                            <FormMessage />
+                          </FormItem>
+                        )}
+                      />
+                    </div>
                   </div>
                 ))}
               </div>
-              {errors.defaultVariantIndex && <p className="text-red-500 text-sm mt-2">{errors.defaultVariantIndex.message}</p>}
-            </section>
-          </CardContent>
-          <CardFooter className="flex justify-end space-x-2 pt-6 border-t">
-            <Button type="button" variant="outline" onClick={() => router.push('/admin/products')} disabled={isLoading || isFetchingData}>
+            </CardContent>
+          </Card>
+
+          <div className="flex justify-end gap-4">
+            <Button
+              type="button"
+              variant="outline"
+              onClick={() => router.push('/admin/products')}
+              disabled={isSubmitting}
+            >
               Cancel
             </Button>
-            <Button type="submit" disabled={isLoading || isFetchingData}>
-              {isLoading ? 'Saving...' : (isFetchingData ? 'Loading Data...' : 'Save Changes')}
+            <Button type="submit" disabled={isSubmitting}>
+              {isSubmitting ? 'Saving...' : 'Save Changes'}
             </Button>
-          </CardFooter>
+          </div>
         </form>
-      </Card>
+      </Form>
     </div>
   );
 } 

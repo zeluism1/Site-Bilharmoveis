@@ -38,6 +38,18 @@ interface TransformedProductModel {
   defaultVariant?: TransformedProductVariant | null;
 }
 
+interface CreateProductVariant {
+  colorKey: string;
+  colorName: {
+    pt: string;
+    en: string;
+    es: string;
+  };
+  colorHex: string;
+  mainImageURL: string;
+  angleImageURLs: string[];
+}
+
 function transformProduct(product: ProductModel & { variants: ProductVariant[] }): TransformedProductModel {
   const variants: TransformedProductVariant[] = product.variants.map(variant => ({
     id: variant.id,
@@ -176,6 +188,71 @@ export async function GET(req: NextRequest) {
     }
     return NextResponse.json(
       { error: 'Failed to fetch products' },
+      { status: 500 }
+    );
+  }
+}
+
+export async function POST(req: NextRequest) {
+  try {
+    const data = await req.json();
+    const defaultVariant = data.variants[data.defaultVariantIndex];
+
+    // Create the product model first
+    const product = await prisma.productModel.create({
+      data: {
+        modelName: data.modelName,
+        displayNamePT: data.displayName.pt,
+        displayNameEN: data.displayName.en,
+        displayNameES: data.displayName.es,
+        category: data.category,
+        subcategory: data.subcategory,
+        baseDescriptionPT: data.baseDescription.pt,
+        baseDescriptionEN: data.baseDescription.en,
+        baseDescriptionES: data.baseDescription.es,
+        baseFeatures: JSON.stringify(data.baseFeatures),
+        baseMaterials: JSON.stringify(data.baseMaterials),
+        dimensionsWidth: data.dimensions.width,
+        dimensionsHeight: data.dimensions.height,
+        dimensionsDepth: data.dimensions.depth,
+        dimensionsUnit: data.dimensions.unit,
+        weight: data.weight,
+        productType: 'furniture', // Default value
+        relatedProductModelIds: '[]', // Default empty array
+      },
+    });
+
+    // Create all variants
+    const createdVariants = await Promise.all(
+      data.variants.map((variant: CreateProductVariant) =>
+        prisma.productVariant.create({
+          data: {
+            modelId: product.id,
+            colorKey: variant.colorKey,
+            colorNamePT: variant.colorName.pt,
+            colorNameEN: variant.colorName.en,
+            colorNameES: variant.colorName.es,
+            colorHex: variant.colorHex,
+            mainImageURL: variant.mainImageURL,
+            angleImageURLs: JSON.stringify(variant.angleImageURLs),
+          },
+        })
+      )
+    );
+
+    // Update the product with the default variant ID
+    await prisma.productModel.update({
+      where: { id: product.id },
+      data: {
+        defaultVariantId: createdVariants[data.defaultVariantIndex].id,
+      },
+    });
+
+    return NextResponse.json({ success: true, productId: product.id });
+  } catch (error) {
+    console.error('Error creating product:', error);
+    return NextResponse.json(
+      { error: 'Failed to create product' },
       { status: 500 }
     );
   }

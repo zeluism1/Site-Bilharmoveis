@@ -1,6 +1,6 @@
 'use client';
 
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
 import { useRouter } from 'next/navigation';
 import { useForm, useFieldArray } from 'react-hook-form';
 import { zodResolver } from '@hookform/resolvers/zod';
@@ -35,42 +35,51 @@ import useSWR from 'swr';
 
 // Form Schema
 const variantSchema = z.object({
+  id: z.string().optional(), // For existing variants
   colorKey: z.string().min(1, 'Color key is required'),
   colorName: z.object({
     pt: z.string().min(1, 'Portuguese color name is required'),
-    en: z.string().optional(),
-    es: z.string().optional(),
+    en: z.string().min(1, 'English color name is required'),
+    es: z.string().min(1, 'Spanish color name is required'),
   }),
   colorHex: z.string().regex(/^#[0-9A-F]{6}$/i, 'Invalid hex color'),
-  mainImageURL: z.string().url('Invalid image URL'),
-  angleImageURLs: z.array(z.string().url('Invalid image URL')),
+  mainImageURL: z.string().refine((value) => {
+    // Accept both URLs and local paths
+    return value.startsWith('http') || value.startsWith('https') || value.startsWith('/images/');
+  }, 'Invalid image path or URL'),
+  angleImageURLs: z.array(z.string().refine((value) => {
+    // Accept both URLs and local paths
+    return value.startsWith('http') || value.startsWith('https') || value.startsWith('/images/');
+  }, 'Invalid image path or URL')),
 });
 
 const productSchema = z.object({
   modelName: z.string().min(1, 'Model name is required'),
   displayName: z.object({
     pt: z.string().min(1, 'Portuguese name is required'),
-    en: z.string().optional(),
-    es: z.string().optional(),
+    en: z.string().min(1, 'English name is required'),
+    es: z.string().min(1, 'Spanish name is required'),
   }),
   category: z.string().min(1, 'Category is required'),
   subcategory: z.string().min(1, 'Subcategory is required'),
+  productType: z.string().min(1, 'Product type is required'),
   baseDescription: z.object({
     pt: z.string().min(1, 'Portuguese description is required'),
-    en: z.string().optional(),
-    es: z.string().optional(),
+    en: z.string().min(1, 'English description is required'),
+    es: z.string().min(1, 'Spanish description is required'),
   }),
   baseFeatures: z.array(z.string()),
   baseMaterials: z.array(z.string()),
   dimensions: z.object({
-    width: z.number().min(0),
-    height: z.number().min(0),
-    depth: z.number().min(0),
-    unit: z.string(),
+    width: z.number().min(0, 'Width must be a positive number'),
+    height: z.number().min(0, 'Height must be a positive number'),
+    depth: z.number().min(0, 'Depth must be a positive number'),
+    unit: z.string().min(1, 'Unit is required'),
   }),
-  weight: z.number().min(0),
+  weight: z.number().min(0, 'Weight must be a positive number'),
   variants: z.array(variantSchema).min(1, 'At least one variant is required'),
   defaultVariantIndex: z.number().min(0),
+  relatedProductModelIds: z.array(z.string()).optional(),
 });
 
 type ProductFormValues = z.infer<typeof productSchema>;
@@ -126,6 +135,7 @@ export default function AddProductPage() {
       displayName: { pt: '', en: '', es: '' },
       category: '',
       subcategory: '',
+      productType: '',
       baseDescription: { pt: '', en: '', es: '' },
       baseFeatures: [],
       baseMaterials: [],
@@ -133,8 +143,19 @@ export default function AddProductPage() {
       weight: 0,
       variants: [defaultVariant],
       defaultVariantIndex: 0,
+      relatedProductModelIds: [],
     },
   });
+
+  // Watch model name changes and update display names
+  const modelName = form.watch('modelName');
+  useEffect(() => {
+    if (modelName) {
+      form.setValue('displayName.pt', modelName);
+      form.setValue('displayName.en', modelName);
+      form.setValue('displayName.es', modelName);
+    }
+  }, [modelName, form]);
 
   const { fields, append, remove } = useFieldArray({
     control: form.control,
@@ -604,9 +625,11 @@ export default function AddProductPage() {
                             <FormControl>
                               <div className="flex gap-2">
                                 <Input {...field} />
-                                <div
-                                  className="w-10 h-10 rounded border"
-                                  style={{ backgroundColor: field.value }}
+                                <input
+                                  type="color"
+                                  value={field.value}
+                                  onChange={(e) => field.onChange(e.target.value)}
+                                  className="w-10 h-10 p-1 rounded border cursor-pointer"
                                 />
                               </div>
                             </FormControl>

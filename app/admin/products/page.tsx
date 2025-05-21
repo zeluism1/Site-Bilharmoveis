@@ -80,7 +80,8 @@ export default function ProductsPage() {
       });
 
       if (!response.ok) {
-        throw new Error('Failed to delete product');
+        const errorData = await response.json();
+        throw new Error(errorData.error || 'Failed to delete product');
       }
 
       toast({
@@ -88,15 +89,20 @@ export default function ProductsPage() {
         description: 'Product deleted successfully',
       });
 
-      // Remove the deleted product from the state
+      // Remove the deleted product from the state and refetch if needed
       setProducts(products.filter(p => p.id !== productToDelete.id));
+      if (products.length === 1 && currentPage > 1) {
+        setCurrentPage(prev => prev - 1);
+      } else {
+        fetchProducts();
+      }
     } catch (err) {
+      console.error('Error deleting product:', err);
       toast({
         title: 'Error',
-        description: 'Failed to delete product',
+        description: err instanceof Error ? err.message : 'Failed to delete product',
         variant: 'destructive',
       });
-      console.error('Error deleting product:', err);
     } finally {
       setShowDeleteDialog(false);
       setProductToDelete(null);

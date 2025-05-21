@@ -1,3 +1,4 @@
+// lib/i18n.ts
 import i18n from 'i18next';
 import { initReactI18next } from 'react-i18next';
 import Backend from 'i18next-http-backend';
@@ -41,12 +42,12 @@ const resources = {
       newDesignsDesc: '',
       browseProducts: 'Browse Products',
       
-      // Homepage - Categories Section
+      // Homepage - Categories Section (Old)
       exploreCollections: 'Explore Our Collections',
       collectionsDesc: 'Premium quality furniture designed for durability and style in high-traffic hospitality environments.',
       explore: 'Explore',
       
-      // Homepage - Category Names
+      // Homepage - Category Names (for old section, can be reused or specific)
       exteriorCollection: 'Exterior Collection',
       interiorCollection: 'Interior Collection',
       chairs: 'Chairs',
@@ -59,6 +60,16 @@ const resources = {
       woodenTables: 'Wooden Tables',
       metalTables: 'Metal Tables',
       sofasAndPoufs: 'Sofas and Poufs',
+
+      // Homepage - New Category Grid Section
+      categoryGrid: {
+        mainTitle: "Explore Our Furniture Ranges",
+        interiorChairs: "Interior Chairs",
+        interiorTables: "Interior Tables",
+        interiorStools: "Interior Stools",
+        exteriorSofas: "Exterior Sofas", // Lounge equivalent
+        exteriorChairs: "Exterior Chairs", // Ottomans equivalent for routing
+      },
       
       // Homepage - Craftsmanship Section
       portugueseCraftsmanship: 'Portuguese Craftsmanship',
@@ -108,12 +119,12 @@ const resources = {
       newDesignsDesc: '',
       browseProducts: 'Explorar Produtos',
       
-      // Homepage - Categories Section
+      // Homepage - Categories Section (Old)
       exploreCollections: 'Explore as Nossas Coleções',
       collectionsDesc: 'Mobiliário de qualidade premium projetado para durabilidade e estilo em ambientes de hospitalidade de alto tráfego.',
       explore: 'Explorar',
       
-      // Homepage - Category Names
+      // Homepage - Category Names (for old section)
       exteriorCollection: 'Coleção de Exterior',
       interiorCollection: 'Coleção de Interior',
       chairs: 'Cadeiras',
@@ -126,6 +137,16 @@ const resources = {
       woodenTables: 'Mesas Madeira',
       metalTables: 'Mesas Metal',
       sofasAndPoufs: 'Sofás e Pufs',
+
+      // Homepage - New Category Grid Section
+      categoryGrid: {
+        mainTitle: "Explore as Nossas Gamas de Mobiliário",
+        interiorChairs: "Cadeiras de Interior",
+        interiorTables: "Mesas de Interior",
+        interiorStools: "Bancos de Interior",
+        exteriorSofas: "Sofás de Exterior",
+        exteriorChairs: "Cadeiras de Exterior",
+      },
       
       // Homepage - Craftsmanship Section
       portugueseCraftsmanship: 'Artesanato Português',
@@ -175,12 +196,12 @@ const resources = {
       newDesignsDesc: '',
       browseProducts: 'Explorar Productos',
       
-      // Homepage - Categories Section
+      // Homepage - Categories Section (Old)
       exploreCollections: 'Explore Nuestras Colecciones',
       collectionsDesc: 'Muebles de calidad premium diseñados para durabilidad y estilo en entornos de hospitalidad de alto tráfico.',
       explore: 'Explorar',
       
-      // Homepage - Category Names
+      // Homepage - Category Names (for old section)
       exteriorCollection: 'Colección de Exterior',
       interiorCollection: 'Colección de Interior',
       chairs: 'Sillas',
@@ -193,6 +214,16 @@ const resources = {
       woodenTables: 'Mesas de Madera',
       metalTables: 'Mesas de Metal',
       sofasAndPoufs: 'Sofás y Pufs',
+
+      // Homepage - New Category Grid Section
+      categoryGrid: {
+        mainTitle: "Explore Nuestras Gamas de Mobiliario",
+        interiorChairs: "Sillas de Interior",
+        interiorTables: "Mesas de Interior",
+        interiorStools: "Taburetes de Interior",
+        exteriorSofas: "Sofás de Exterior",
+        exteriorChairs: "Sillas de Exterior",
+      },
       
       // Homepage - Craftsmanship Section
       portugueseCraftsmanship: 'Artesanía Portuguesa',
@@ -209,18 +240,11 @@ const resources = {
 };
 
 i18n
-  // load translation using http -> see /public/locales (i.e. https://github.com/i18next/react-i18next/tree/master/example/react/public/locales)
-  // learn more: https://github.com/i18next/i18next-http-backend
-  .use(Backend)
-  // detect user language
-  // learn more: https://github.com/i18next/i18next-browser-languageDetector
+  .use(Backend) // If you are using HTTP backend for translations from /public/locales
   .use(LanguageDetector)
-  // pass the i18n instance to react-i18next.
   .use(initReactI18next)
-  // init i18next
-  // for all options read: https://www.i18next.com/overview/configuration-options
   .init({
-    resources,
+    resources, // Use the 'resources' object directly if not using HTTP backend for these
     fallbackLng: 'en',
     debug: process.env.NODE_ENV === 'development',
     
@@ -228,8 +252,11 @@ i18n
     defaultNS: 'common',
     
     interpolation: {
-      escapeValue: false, // not needed for react as it escapes by default
+      escapeValue: false, 
     },
+    // backend: { // Configuration for i18next-http-backend if you load from /public/locales
+    //   loadPath: '/locales/{{lng}}/{{ns}}.json',
+    // },
   });
 
-export default i18n; 
+export default i18n;

@@ -4,11 +4,16 @@ import { useState, useEffect, useMemo } from "react"
 import Image from "next/image"
 import Link from "next/link"
 import { X, ChevronLeft, ChevronRight } from "lucide-react"
-import { useTranslation } from 'react-i18next'; // Import for getting current language
+import { useTranslation } from 'react-i18next'
 
 import { Button } from "@/components/ui/button"
 import { ApiProductModel, ApiProductVariant, ProductColorData, I18nString } from "@/types/product"
-import { getLocalizedField } from "@/lib/products/data"
+
+// Helper function to get localized field
+function getLocalizedField(obj: I18nString | undefined | null, lang: string): string {
+  if (!obj) return '';
+  return obj[lang as keyof I18nString] || obj.en || obj.pt || obj.es || '';
+}
 
 // Category translations
 const categoryNameMappings: Record<string, I18nString> = {

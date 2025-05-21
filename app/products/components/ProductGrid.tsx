@@ -9,16 +9,6 @@ import { useTranslation } from 'react-i18next'
 
 import { Button } from "@/components/ui/button"
 import ProductModal from "./ProductModal" // This modal will need significant updates
-import {
-  productModels as allProductModelsData, // Import the new array
-  ProductModel,                         // Import the new type
-  ProductVariant,                       // Import for type safety if needed here
-  getLocalizedField,
-  // Add any other specific utility functions you might have created for ProductModel
-  // e.g., getModelsByCategory, getModelsByProductType
-} from "@/lib/products/data"
-
-// Import shared types
 import { ApiProductModel, ApiProductVariant, ApiProductsResponse, I18nString } from '@/types/product'
 
 // Category translations
@@ -454,4 +444,10 @@ function ProductModelCardSkeleton() {
       </div>
     </div>
   );
+}
+
+// Helper function to get localized field
+function getLocalizedField(obj: I18nString | undefined | null, lang: string): string {
+  if (!obj) return '';
+  return obj[lang as keyof I18nString] || obj.en || obj.pt || obj.es || '';
 }
