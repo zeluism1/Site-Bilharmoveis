@@ -13,19 +13,19 @@ import "@/lib/i18n" // Ensure i18n is initialized
 // Define the structure for a category grid item
 interface CategoryGridItemDef {
   id: string;
-  titleKey: string; 
-  imageSrc: string; 
-  href: string; 
+  titleKey: string;
+  imageSrc: string;
+  href: string;
   gridConfig: {
     mobileOrder: string;
-    desktop: string; 
+    desktop: string;
   };
 }
 
 // Component for a single category card in the new grid
 const CategoryGridCard: React.FC<{ item: CategoryGridItemDef }> = ({ item }) => {
   const { t } = useTranslation();
-  const cardClasses = `group relative overflow-hidden rounded-lg shadow-lg block h-full 
+  const cardClasses = `group relative overflow-hidden rounded-xl shadow-lg block h-full 
                        ${item.gridConfig.mobileOrder} ${item.gridConfig.desktop} 
                        transition-all duration-300 ease-in-out hover:shadow-2xl transform hover:-translate-y-1`;
 
@@ -35,14 +35,17 @@ const CategoryGridCard: React.FC<{ item: CategoryGridItemDef }> = ({ item }) => 
         src={item.imageSrc}
         alt={t(item.titleKey)}
         fill
-        className="object-cover transition-transform duration-500 ease-in-out group-hover:scale-105"
-        sizes="(max-width: 768px) 100vw, (max-width: 1200px) 50vw, 33vw"
+        className="object-cover transition-transform duration-300 ease-in-out group-hover:scale-105"
+        sizes="(max-width: 767px) 100vw, (max-width: 1279px) 50vw, 40vw" // Adjusted for new card dimensions
       />
-      <div className="absolute inset-0 bg-gradient-to-t from-black/80 via-black/40 to-transparent opacity-90 group-hover:opacity-100 transition-opacity duration-300"></div>
-      <div className="absolute bottom-0 left-0 p-5 md:p-8">
-        <h3 className="text-xl md:text-2xl lg:text-3xl font-semibold text-white transition-colors duration-300 group-hover:text-[#F15A29]">
-          {t(item.titleKey)}
-        </h3>
+      <div className="absolute inset-0 bg-gradient-to-t from-black/0 via-black/0 to-transparent/0 group-hover:from-black/25 group-hover:via-black/15 transition-all duration-300 ease-in-out"></div>
+      <div className="absolute bottom-0 left-0 right-0 p-4 sm:p-5 md:p-6 lg:p-7 xl:p-8"> {/* Adjusted padding */}
+        <div className="flex justify-between items-end">
+          <h3 className="text-lg sm:text-xl md:text-xl lg:text-2xl xl:text-3xl font-semibold text-white transition-colors duration-300 ease-in-out group-hover:text-[#F15A29] [text-shadow:0_1px_3px_rgba(0,0,0,0.4)]"> {/* Adjusted text sizes */}
+            {t(item.titleKey)}
+          </h3>
+          <ArrowRight className="w-4 h-4 sm:w-5 sm:h-5 lg:w-6 lg:h-6 xl:w-7 xl:h-7 text-white opacity-0 transform translate-x-3 group-hover:opacity-100 group-hover:translate-x-0 transition-all duration-300 ease-in-out delay-100" /> {/* Adjusted icon sizes */}
+        </div>
       </div>
     </Link>
   );
@@ -52,7 +55,7 @@ const CategoryGridCard: React.FC<{ item: CategoryGridItemDef }> = ({ item }) => 
 export default function Home() {
   const { t } = useTranslation()
   const [isMounted, setIsMounted] = useState(false)
-  
+
   useEffect(() => {
     setIsMounted(true)
   }, [])
@@ -72,41 +75,41 @@ export default function Home() {
   const categoryGridItems: CategoryGridItemDef[] = [
     {
       id: 'grid-interior-chairs',
-      titleKey: 'categoryGrid.interiorChairs', 
-      imageSrc: '/images/placeholder-cat-chairs-armchairs.jpg', // REPLACE
+      titleKey: 'categoryGrid.interiorChairs',
+      imageSrc: '/images/cadeiras_interior.png', // REPLACE
       href: '/products?category=Interior&subcategory=Cadeiras',
-      gridConfig: { mobileOrder: 'order-1', desktop: 'md:col-span-3 md:row-start-1' },
+      gridConfig: { mobileOrder: 'order-1', desktop: 'md:col-span-4 md:row-start-1' }, // Was col-span-5
     },
     {
       id: 'grid-interior-tables',
-      titleKey: 'categoryGrid.interiorTables', 
-      imageSrc: '/images/placeholder-cat-coffee-tables.jpg', // REPLACE
+      titleKey: 'categoryGrid.interiorTables',
+      imageSrc: '/images/mesas_interior.png', // REPLACE
       href: '/products?category=Interior&subcategory=Mesas',
-      gridConfig: { mobileOrder: 'order-3', desktop: 'md:col-span-3 md:row-start-2' },
+      gridConfig: { mobileOrder: 'order-3', desktop: 'md:col-span-4 md:row-start-2' }, // Was col-span-5
     },
     {
       id: 'grid-interior-stools',
-      titleKey: 'categoryGrid.interiorStools', 
-      imageSrc: '/images/placeholder-cat-bar-stools.jpg', // REPLACE
-      href: '/products?category=Interior&subcategory=Bancos Altos', // Or 'Bancos'
-      gridConfig: { mobileOrder: 'order-2', desktop: 'md:col-start-4 md:col-span-2 md:row-span-2 md:row-start-1' },
+      titleKey: 'categoryGrid.interiorStools',
+      imageSrc: '/images/banco_interior.png', // REPLACE
+      href: '/products?category=Interior&subcategory=Bancos',
+      gridConfig: { mobileOrder: 'order-2', desktop: 'md:col-start-5 md:col-span-4 md:row-span-2 md:row-start-1' }, // col-start-5 (was 6), col-span-4 (was 3)
     },
     {
       id: 'grid-exterior-sofas',
-      titleKey: 'categoryGrid.exteriorSofas', 
-      imageSrc: '/images/placeholder-cat-lounge.jpg', // REPLACE
+      titleKey: 'categoryGrid.exteriorSofas',
+      imageSrc: '/images/sofa_exterior.png', // REPLACE
       href: '/products?category=Exterior&subcategory=Sofás',
-      gridConfig: { mobileOrder: 'order-4', desktop: 'md:col-start-6 md:col-span-3 md:row-start-1' },
+      gridConfig: { mobileOrder: 'order-4', desktop: 'md:col-start-9 md:col-span-4 md:row-start-1' }, // col-start-9 (was 9), col-span-4 (was 4)
     },
     {
       id: 'grid-exterior-chairs',
-      titleKey: 'categoryGrid.exteriorChairs', 
-      imageSrc: '/images/placeholder-cat-ottomans.jpg', // REPLACE
+      titleKey: 'categoryGrid.exteriorChairs',
+      imageSrc: '/images/cadeira_exterior.png', // REPLACE
       href: '/products?category=Exterior&subcategory=Cadeiras',
-      gridConfig: { mobileOrder: 'order-5', desktop: 'md:col-start-6 md:col-span-3 md:row-start-2' },
+      gridConfig: { mobileOrder: 'order-5', desktop: 'md:col-start-9 md:col-span-4 md:row-start-2' }, // col-start-9 (was 9), col-span-4 (was 4)
     },
   ];
-  
+
   return (
     <div className="flex flex-col min-h-screen">
       {/* Hero Section */}
@@ -124,7 +127,7 @@ export default function Home() {
         </div>
         <div className="container relative z-10 mx-auto px-4 md:px-6">
           <div className="max-w-2xl text-white">
-            <h1 
+            <h1
               className="text-4xl font-bold tracking-tight sm:text-5xl md:text-6xl"
               dangerouslySetInnerHTML={{ __html: highlightHeroTitle() }}
             />
@@ -195,14 +198,23 @@ export default function Home() {
 
       {/* New Category Grid Section */}
       <section className="py-20 md:py-24 bg-white">
-        <div className="container mx-auto px-4 md:px-6">
+        {/* Reduced side padding */}
+        <div className="max-w-screen-2xl mx-auto px-2 sm:px-4 md:px-4 lg:px-6 xl:px-6 2xl:px-8">
           <div className="text-center mb-12 md:mb-16">
             <h2 className="text-3xl md:text-4xl font-bold tracking-tight mb-3 text-gray-900">
               {t('categoryGrid.mainTitle')}
             </h2>
             <div className="w-24 h-1 bg-[#F15A29] mx-auto mb-6"></div>
           </div>
-          <div className="grid grid-cols-1 md:grid-cols-8 auto-rows-[300px] sm:auto-rows-[340px] md:auto-rows-[280px] lg:auto-rows-[320px] xl:auto-rows-[350px] gap-5 md:gap-8">
+          {/* Updated grid columns and SHORTER row heights */}
+          <div className="grid grid-cols-1 md:grid-cols-12 
+                          auto-rows-[300px] 
+                          sm:auto-rows-[340px] 
+                          md:auto-rows-[280px] 
+                          lg:auto-rows-[320px] 
+                          xl:auto-rows-[350px] 
+                          2xl:auto-rows-[400px] 
+                          gap-6 md:gap-8">
             {categoryGridItems.map((item) => (
               <CategoryGridCard key={item.id} item={item} />
             ))}
@@ -210,47 +222,7 @@ export default function Home() {
         </div>
       </section>
 
-      {/* Featured Products Section */}
-      <section className="py-16 bg-gray-50">
-         <div className="container mx-auto px-4 md:px-6">
-          <div className="text-center mb-12">
-            <h2 className="text-3xl font-bold tracking-tight mb-2 text-gray-900">{t('featuredProducts')}</h2>
-            <div className="w-24 h-1 bg-[#F15A29] mx-auto mb-6"></div>
-          </div>
-          <div className="grid grid-cols-1 md:grid-cols-3 gap-8">
-            {featuredProducts.map((product) => (
-              <div key={product.id} className="group relative overflow-hidden rounded-lg shadow-md hover:shadow-xl transition-all border border-gray-100 bg-white">
-                <div className="aspect-square overflow-hidden bg-gray-100">
-                  <Image
-                    src={product.image || "/images/placeholder.jpg"} // PLACEHOLDER
-                    alt={product.name} // Should be translated if names are multilingual
-                    width={500}
-                    height={500}
-                    className="h-full w-full object-cover transition-transform duration-300 group-hover:scale-105"
-                  />
-                </div>
-                <div className="p-6">
-                  <h3 className="text-xl font-semibold">{product.name}</h3>
-                  <p className="mt-2 text-gray-600">{product.description}</p>
-                  <Link 
-                    href={`/products/${product.id}`} // Assuming product detail pages exist
-                    className="mt-4 inline-flex items-center text-[#F15A29] hover:text-[#d14a1e] font-medium"
-                  >
-                    {t('viewDetails')} <ArrowRight className="ml-1 h-4 w-4" />
-                  </Link>
-                </div>
-              </div>
-            ))}
-          </div>
-          <div className="mt-12 text-center">
-            <Button asChild className="bg-[#F15A29] hover:bg-[#d14a1e] text-white">
-              <Link href="/products">
-                {t('viewAllProducts')} <ArrowRight className="ml-2 h-4 w-4" />
-              </Link>
-            </Button>
-          </div>
-        </div>
-      </section>
+ 
 
       {/* Craftsmanship Section */}
       <section className="py-16 bg-white">
