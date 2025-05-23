@@ -6,7 +6,7 @@ import Link from 'next/link';
 import { Button } from '@/components/ui/button';
 import { useToast } from '@/components/ui/use-toast';
 import { cn } from '@/lib/utils';
-import { Package, PlusCircle, LogOut, Home } from 'lucide-react';
+import { Package, PlusCircle, LogOut, Home, Briefcase } from 'lucide-react';
 import type { AuthCheckResponse } from '@/types/api';
 
 interface AdminLayoutProps {
@@ -123,6 +123,18 @@ export default function AdminLayout({ children }: AdminLayoutProps) {
               >
                 <PlusCircle className="mr-3 h-5 w-5" />
                 Add New Product
+              </Link>
+              <Link
+                href="/admin/projects"
+                className={cn(
+                  "flex items-center px-4 py-2 text-sm font-medium rounded-md",
+                  (pathname === '/admin/projects' || pathname.startsWith('/admin/projects/add') || pathname.startsWith('/admin/projects/edit'))
+                    ? "bg-gray-200 text-gray-900"
+                    : "text-gray-600 hover:bg-gray-50"
+                )}
+              >
+                <Briefcase className="mr-3 h-5 w-5" />
+                Projects
               </Link>
             </nav>
           </aside>

@@ -57,3 +57,17 @@ model ProductVariant {
   model           ProductModel  @relation(fields: [modelId], references: [id], onDelete: Cascade)
   defaultForModel ProductModel? @relation("DefaultVariant")
 }
+
+model Project {
+  id            String   @id @default(cuid())
+  titlePT       String?
+  titleEN       String?
+  titleES       String?
+  imageUrl      String
+  location      String?
+  descriptionPT String?
+  descriptionEN String?
+  descriptionES String?
+  createdAt     DateTime @default(now())
+  updatedAt     DateTime @updatedAt
+}

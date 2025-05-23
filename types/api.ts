@@ -116,6 +116,37 @@ export type FileUploadResponse = {
   error?: string;
 };
 
+// Project Types (for Admin and API)
+export type Project = {
+  id?: string;
+  titlePT: string;
+  titleEN?: string;
+  titleES?: string;
+  imageUrl: string;
+  location?: string;
+  descriptionPT?: string;
+  descriptionEN?: string;
+  descriptionES?: string;
+  createdAt?: Date;
+  updatedAt?: Date;
+};
+
+export type ProjectsListResponse = {
+  data: Project[];
+  // Add pagination if needed later
+};
+
+export type ProjectResponse = {
+  data: Project;
+};
+
+export type ProjectCreateUpdateResponse = {
+  success: boolean;
+  message?: string;
+  project?: Project;
+  error?: any; // For validation errors
+};
+
 // Zod Schemas for Validation
 
 export const dimensionsSchema = z.object({
@@ -156,6 +187,20 @@ export const productModelSchema = z.object({
   variants: z.array(productVariantSchema).min(1, 'At least one variant is required'),
   defaultVariantIndex: z.number().min(0),
   relatedProductModelIds: z.array(z.string()).optional(),
+  createdAt: z.date().optional(),
+  updatedAt: z.date().optional(),
+});
+
+export const projectSchema = z.object({
+  id: z.string().optional(),
+  titlePT: z.string().optional().nullable(),
+  titleEN: z.string().optional().nullable(),
+  titleES: z.string().optional().nullable(),
+  imageUrl: z.string().min(1, 'Image URL is required'),
+  location: z.string().optional().nullable(),
+  descriptionPT: z.string().optional().nullable(),
+  descriptionEN: z.string().optional().nullable(),
+  descriptionES: z.string().optional().nullable(),
   createdAt: z.date().optional(),
   updatedAt: z.date().optional(),
 }); 

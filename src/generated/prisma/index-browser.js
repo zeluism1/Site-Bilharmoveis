@@ -156,6 +156,20 @@ exports.Prisma.ProductVariantScalarFieldEnum = {
   updatedAt: 'updatedAt'
 };
 
+exports.Prisma.ProjectScalarFieldEnum = {
+  id: 'id',
+  titlePT: 'titlePT',
+  titleEN: 'titleEN',
+  titleES: 'titleES',
+  imageUrl: 'imageUrl',
+  location: 'location',
+  descriptionPT: 'descriptionPT',
+  descriptionEN: 'descriptionEN',
+  descriptionES: 'descriptionES',
+  createdAt: 'createdAt',
+  updatedAt: 'updatedAt'
+};
+
 exports.Prisma.SortOrder = {
   asc: 'asc',
   desc: 'desc'
@@ -169,7 +183,8 @@ exports.Prisma.NullsOrder = {
 
 exports.Prisma.ModelName = {
   ProductModel: 'ProductModel',
-  ProductVariant: 'ProductVariant'
+  ProductVariant: 'ProductVariant',
+  Project: 'Project'
 };
 
 /**
